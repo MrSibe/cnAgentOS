@@ -14,8 +14,9 @@
 ## 3. 身份、权限与 CSRF
 
 - 浏览器登录后通过服务端会话 Cookie 访问受保护接口。
+- 会话 Cookie 仅保存随机不透明令牌；生产环境 Cookie 名为 `__Host-cnagentos_session`，使用 `HttpOnly`、`Secure`、`SameSite=Lax` 与 `Path=/`。
 - 除登录外，本文接口均要求登录；后台接口还要求对应权限代码。
-- `POST`、`PUT`、`PATCH`、`DELETE` 请求必须携带有效 CSRF token。
+- `POST`、`PUT`、`PATCH`、`DELETE` 请求必须以 `X-CSRF-Token` 请求头携带有效 CSRF token；该值由登录响应或 `GET /api/v1/auth/me` 获取。
 - 权限不足返回 HTTP `403`，未登录或会话失效返回 HTTP `401`。
 - 列表页面隐藏无权操作按钮不是授权机制，Controller 必须执行权限检查。
 
@@ -112,4 +113,3 @@ data: {"code":"UPSTREAM_ERROR","message":"回答生成失败"}
 ## 8. 审计要求
 
 执行权限配置、模型变更、来源或规则变更、采集任务发起、数据治理状态变更的成功或失败请求，均应写入审计记录。
-

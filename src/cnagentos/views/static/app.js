@@ -1,10 +1,10 @@
 const app = document.querySelector("#app");
 
 const state = {
-  csrfToken: localStorage.getItem("csrfToken") || "",
+  csrfToken: "",
   user: null,
   navigation: [],
-  route: window.location.pathname === "/" ? "/admin/models" : window.location.pathname,
+  route: window.location.pathname === "/" || window.location.pathname === "/admin" ? "/admin/users" : window.location.pathname,
 };
 
 const routes = {
@@ -30,7 +30,7 @@ const routes = {
       ["code", "角色代码"],
       ["name", "名称"],
       ["description", "说明"],
-      ["permission_codes", "权限", (value) => chips(value || [])],
+      ["permissions", "权限", (value) => chips(value || [])],
       ["status", "状态", statusBadge],
       ["is_system", "系统角色", (value) => (value ? badge("是", "warn") : badge("否", "off"))],
     ],
@@ -139,6 +139,7 @@ async function boot() {
   document.body.insertAdjacentHTML("afterbegin", document.querySelector("#icon-sprite").innerHTML);
   try {
     state.user = (await api.request("/api/v1/auth/me")).data;
+    state.csrfToken = state.user.csrf_token || "";
     state.navigation = (await api.request("/api/v1/auth/navigation")).data;
     renderShell();
     await renderPage();
@@ -176,7 +177,6 @@ function renderLogin(error = "") {
         body: JSON.stringify(Object.fromEntries(form.entries())),
       });
       state.csrfToken = payload.data.csrf_token;
-      localStorage.setItem("csrfToken", state.csrfToken);
       state.user = payload.data.user;
       state.navigation = (await api.request("/api/v1/auth/navigation")).data;
       history.replaceState({}, "", state.route);
@@ -242,7 +242,7 @@ function renderNavigation(nodes) {
 async function renderPage() {
   const page = document.querySelector("#page");
   if (!routes[state.route]) {
-    state.route = "/admin/models";
+    state.route = "/admin/users";
     history.replaceState({}, "", state.route);
   }
   const route = routes[state.route];
@@ -455,7 +455,6 @@ function bindCreateForm() {
 
 async function logout() {
   await api.request("/api/v1/auth/logout", { method: "POST" }).catch(() => null);
-  localStorage.removeItem("csrfToken");
   state.csrfToken = "";
   state.user = null;
   renderLogin();

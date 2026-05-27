@@ -47,7 +47,7 @@
 | `created_at` | datetime | NOT NULL | 创建时间 |
 | `last_seen_at` | datetime | nullable | 最近活动时间 |
 
-规则：退出、用户停用或密码重置可撤销相关会话；原始会话令牌不写入日志或响应体以外的存储。
+规则：退出、用户停用或密码重置可撤销相关会话；原始会话令牌仅通过受保护 Cookie 发送，不写入日志或数据库；CSRF token 由当前会话安全派生并只保存校验哈希。
 
 ### `roles`
 

@@ -21,8 +21,9 @@ cnAgentOS 是一个面向信息采集、数据沉淀和智能问答的 Web 应�
 
 ## 目标架构
 
-- 后端语言：Python。
+- 后端语言：Python，使用 FastAPI 与 SQLAlchemy 异步数据层。
 - 架构形态：模块化 MVC 单体应用。
+- 数据库：PostgreSQL，迁移由 Alembic 管理。
 - 设计原则：先完成可靠的业务闭环，再根据真实规模评估服务拆分。
 - 开发契约：新的数据库与 API 设计以 `docs/` 内文档为准，不继承原型代码中的技术细节。
 
@@ -34,24 +35,34 @@ cnAgentOS 是一个面向信息采集、数据沉淀和智能问答的 Web 应�
 # 首次拉取或依赖变化后同步环境
 uv sync
 
-# 在项目锁定环境中执行程序或工具
+# 启动本地 PostgreSQL 并执行迁移
+docker compose up -d postgres
+uv run alembic upgrade head
+
+# 一次性创建首个系统管理员（密码通过交互输入或环境变量提供）
+uv run cnagentos create-system-admin --username admin --display-name "系统管理员"
+
+# 运行 API 服务
 uv run main.py
 
 # 检查依赖声明与锁文件是否一致
 uv lock --check
+
+# 运行后端自动化测试
+uv run pytest
 ```
 
-依赖新增或调整应使用 `uv add` / `uv remove`，并在同一次变更中提交更新后的 `pyproject.toml` 与 `uv.lock`。测试、格式化和启动命令将在 Phase 0 技术选型落地后继续补充，执行时统一使用 `uv run ...`。
+本地配置可从 `.env.example` 开始设置，示例值只用于本地开发，不用于部署。依赖新增或调整应使用 `uv add` / `uv remove`，并在同一次变更中提交更新后的 `pyproject.toml` 与 `uv.lock`。
 
-## Phase 1 界面联调
+## Phase 1 管理端界面
 
-C 工作流可以先运行本地页面壳对接 Phase 1 API 契约：
+管理端页面由 FastAPI 应用直接提供，并调用同源 `/api/v1` 接口：
 
 ```bash
 uv run python main.py --port 8000
 ```
 
-启动后访问 `http://127.0.0.1:8000`。当前开发服务器只提供脱敏 mock 数据，用于登录页、后台框架、用户/角色/权限/导航页面、模型配置页面和普通/SSE 测试交互联调；正式权限、安全和业务规则仍以后端 `/api/v1` 实现为准。
+启动后访问 `http://127.0.0.1:8000`。登录页、后台框架、用户/角色/权限/导航页面和审计页面对接 Phase 1 A 已实现接口；模型配置和测试页面保留入口，等待 Phase 1 B 模型引擎接口接入。
 
 ## 文档导航
 
