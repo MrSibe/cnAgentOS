@@ -1,8 +1,12 @@
+import asyncio
 import json
 
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from conftest import ADMIN_PASSWORD
+from cnagentos.models.entities import User
+from cnagentos.services.bootstrap import create_system_admin
 
 
 async def test_login_me_and_csrf_enforcement(client, admin_session):
@@ -385,6 +389,91 @@ async def test_permission_denied_for_non_admin(client, admin_session, app):
             json={"code": "bad_role", "name": "未授权创建"},
         )
         assert forbidden_csrf.status_code == 403
+
+
+async def test_permission_revocation_applies_to_existing_session(client, admin_session, app):
+    permissions = (await client.get("/api/v1/admin/permissions")).json()["data"]
+    users_permission = next(item for item in permissions if item["code"] == "users.manage")
+    role = await client.post(
+        "/api/v1/admin/roles",
+        headers={"X-CSRF-Token": admin_session},
+        json={
+            "code": "temporary_users_manager",
+            "name": "Temporary Users Manager",
+            "permission_ids": [users_permission["id"]],
+        },
+    )
+    role_id = role.json()["data"]["id"]
+    await client.post(
+        "/api/v1/admin/users",
+        headers={"X-CSRF-Token": admin_session},
+        json={
+            "username": "temporary-manager",
+            "display_name": "Temporary Manager",
+            "password": "Temporary-password-123",
+            "role_ids": [role_id],
+        },
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as manager:
+        login = await manager.post(
+            "/api/v1/auth/login",
+            json={"username": "temporary-manager", "password": "Temporary-password-123"},
+        )
+        assert login.status_code == 200
+        assert (await manager.get("/api/v1/admin/users")).status_code == 200
+
+        revoke = await client.patch(
+            f"/api/v1/admin/roles/{role_id}",
+            headers={"X-CSRF-Token": admin_session},
+            json={"permission_ids": []},
+        )
+        assert revoke.status_code == 200
+
+        denied = await manager.get("/api/v1/admin/users")
+        assert denied.status_code == 403
+        assert denied.json()["error"]["code"] == "PERMISSION_DENIED"
+
+
+async def test_concurrent_disable_preserves_system_admin_access(client, admin_session, app):
+    async with app.state.sessionmaker() as session:
+        backup, _ = await create_system_admin(
+            session, "backup-admin", "Backup Administrator", "Backup-password-123"
+        )
+        backup_id = backup.id
+    root_id = (await client.get("/api/v1/auth/me")).json()["data"]["id"]
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver"
+        ) as backup_client:
+            login = await backup_client.post(
+                "/api/v1/auth/login",
+                json={"username": "backup-admin", "password": "Backup-password-123"},
+            )
+            backup_csrf = login.json()["data"]["csrf_token"]
+            disable_root, disable_backup = await asyncio.gather(
+                client.patch(
+                    f"/api/v1/admin/users/{root_id}/status",
+                    headers={"X-CSRF-Token": admin_session},
+                    json={"status": "disabled"},
+                ),
+                backup_client.patch(
+                    f"/api/v1/admin/users/{backup_id}/status",
+                    headers={"X-CSRF-Token": backup_csrf},
+                    json={"status": "disabled"},
+                ),
+            )
+            assert sorted([disable_root.status_code, disable_backup.status_code]) == [200, 409]
+    finally:
+        async with app.state.sessionmaker() as session:
+            root = await session.scalar(select(User).where(User.id == root_id))
+            backup = await session.scalar(select(User).where(User.id == backup_id))
+            root.status = "active"
+            backup.status = "active"
+            await session.commit()
 
 
 async def test_audit_logs_filtering(client, admin_session):

@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload
 
 from cnagentos.api import ApiError
 from cnagentos.config import Settings
@@ -13,7 +13,7 @@ from cnagentos.security import (
     csrf_token_for_session,
     hash_token,
     new_session_token,
-    verify_password,
+    verify_password_async,
 )
 
 
@@ -45,7 +45,7 @@ async def login(
     user_agent: str | None,
 ) -> tuple[User, str, str]:
     user = await session.scalar(select(User).where(User.username == username))
-    valid_password = verify_password(password, user.password_hash if user else None)
+    valid_password = await verify_password_async(password, user.password_hash if user else None)
     if user is None or not valid_password or user.status != "active":
         raise ApiError(401, "LOGIN_FAILED", "用户名或密码错误")
 
@@ -73,7 +73,7 @@ async def load_context(
         raise ApiError(401, "AUTH_REQUIRED", "请先登录")
     auth_session = await session.scalar(
         select(AuthSession)
-        .options(selectinload(AuthSession.user))
+        .options(joinedload(AuthSession.user))
         .where(AuthSession.token_hash == hash_token(raw_token))
     )
     now = utc_now()
@@ -88,9 +88,13 @@ async def load_context(
     csrf_token = csrf_token_for_session(raw_token, settings.csrf_secret)
     if auth_session.csrf_secret_hash != hash_token(csrf_token):
         raise ApiError(401, "AUTH_REQUIRED", "登录状态已失效")
-    auth_session.last_seen_at = now
+
     permissions = await get_permission_codes(session, auth_session.user_id)
-    await session.commit()
+
+    last_seen = auth_session.last_seen_at
+    if last_seen is None or (now - last_seen).total_seconds() >= 300:
+        auth_session.last_seen_at = now
+        await session.commit()
     return AuthContext(auth_session.user, auth_session, permissions, csrf_token)
 
 

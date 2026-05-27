@@ -167,9 +167,7 @@ boot();
 async function boot() {
   document.body.insertAdjacentHTML("afterbegin", document.querySelector("#icon-sprite").innerHTML);
   try {
-    state.user = (await api.request("/api/v1/auth/me")).data;
-    state.csrfToken = state.user.csrf_token || "";
-    state.navigation = (await api.request("/api/v1/auth/navigation")).data;
+    await refreshBootState();
     renderShell();
     await renderPage();
   } catch {
@@ -207,8 +205,7 @@ function renderLogin(error = "") {
         body: JSON.stringify(Object.fromEntries(form.entries())),
       });
       state.csrfToken = payload.data.csrf_token;
-      state.user = payload.data.user;
-      state.navigation = (await api.request("/api/v1/auth/navigation")).data;
+      await refreshBootState();
       history.replaceState({}, "", state.route);
       renderShell();
       await renderPage();
@@ -623,9 +620,16 @@ async function afterAdminMutation(path) {
 }
 
 async function refreshNavigation() {
-  state.navigation = (await api.request("/api/v1/auth/navigation")).data;
+  await refreshBootState();
   renderShell();
   updateActiveNavigation();
+}
+
+async function refreshBootState() {
+  const payload = (await api.request("/api/v1/auth/boot")).data;
+  state.user = payload.user;
+  state.csrfToken = payload.csrf_token || "";
+  state.navigation = payload.navigation;
 }
 
 async function runNormalTest() {

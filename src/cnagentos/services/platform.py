@@ -77,18 +77,36 @@ class PlatformService:
         ).all()
         return [{"id": role.id, "code": role.code, "name": role.name} for role in roles]
 
-    async def _serialize_user(self, user: User) -> dict:
+    async def _serialize_user(self, user: User, roles_by_user: dict[str, list[dict]]) -> dict:
         return {
             "id": user.id,
             "username": user.username,
             "display_name": user.display_name,
             "status": user.status,
             "is_system_admin": user.is_system_admin,
-            "roles": await self._roles_for_user(user.id),
+            "roles": roles_by_user.get(user.id, []),
             "last_login_at": user.last_login_at,
             "created_at": user.created_at,
             "updated_at": user.updated_at,
         }
+
+    async def _roles_map(self, user_ids: list[str]) -> dict[str, list[dict]]:
+        if not user_ids:
+            return {}
+        rows = (
+            await self.session.execute(
+                select(UserRole.user_id, Role.id, Role.code, Role.name)
+                .join(Role, Role.id == UserRole.role_id)
+                .where(UserRole.user_id.in_(list(set(user_ids))))
+                .order_by(Role.name)
+            )
+        ).all()
+        result: dict[str, list[dict]] = {uid: [] for uid in user_ids}
+        for row in rows:
+            result.setdefault(row[0], []).append(
+                {"id": row[1], "code": row[2], "name": row[3]}
+            )
+        return result
 
     async def list_users(
         self, page: int, page_size: int, q: str | None, status: str | None
@@ -114,7 +132,8 @@ class PlatformService:
                 .limit(page_size)
             )
         ).all()
-        return [await self._serialize_user(user) for user in users], int(total or 0)
+        roles_by_user = await self._roles_map([u.id for u in users])
+        return [await self._serialize_user(user, roles_by_user) for user in users], int(total or 0)
 
     async def _active_roles(self, role_ids: list[str]) -> list[Role]:
         if not role_ids:
@@ -147,7 +166,7 @@ class PlatformService:
             self.session.add(UserRole(user_id=user.id, role_id=role.id))
         await self._audit("user.created", "user", user.id, "succeeded", {"username": user.username})
         await self.session.commit()
-        return await self._serialize_user(user)
+        return await self._serialize_user(user, await self._roles_map([user.id]))
 
     async def _ensure_system_admin_role(self, user: User, role_ids: list[str]) -> None:
         if not user.is_system_admin:
@@ -178,7 +197,7 @@ class PlatformService:
                 self.session.add(UserRole(user_id=user.id, role_id=role.id))
         await self._audit("user.updated", "user", user.id, "succeeded")
         await self.session.commit()
-        return await self._serialize_user(user)
+        return await self._serialize_user(user, await self._roles_map([user.id]))
 
     async def update_user_status(self, user_id: str, status: str) -> dict:
         if status not in VALID_ACCOUNT_STATUSES:
@@ -187,12 +206,15 @@ class PlatformService:
         if user is None:
             raise ApiError(404, "NOT_FOUND", "用户不存在")
         if status == "disabled" and user.is_system_admin and user.status == "active":
-            active_admins = await self.session.scalar(
-                select(func.count())
-                .select_from(User)
-                .where(User.is_system_admin.is_(True), User.status == "active")
-            )
-            if int(active_admins or 0) <= 1:
+            active_admins = (
+                await self.session.scalars(
+                    select(User.id)
+                    .where(User.is_system_admin.is_(True), User.status == "active")
+                    .order_by(User.id)
+                    .with_for_update()
+                )
+            ).all()
+            if len(active_admins) <= 1:
                 raise ApiError(409, "INVALID_STATE", "不得停用最后一个系统管理员")
         user.status = status
         if status == "disabled":
@@ -201,7 +223,7 @@ class PlatformService:
             "user.status_changed", "user", user.id, "succeeded", {"status": status}
         )
         await self.session.commit()
-        return await self._serialize_user(user)
+        return await self._serialize_user(user, await self._roles_map([user.id]))
 
     async def reset_user_password(self, user_id: str, new_password: str) -> None:
         user = await self.session.get(User, user_id)

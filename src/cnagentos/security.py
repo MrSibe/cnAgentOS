@@ -1,6 +1,8 @@
+import asyncio
 import hashlib
 import hmac
 import secrets
+from functools import lru_cache
 
 from pwdlib import PasswordHash
 
@@ -10,7 +12,11 @@ from cnagentos.api import ApiError
 PASSWORD_MIN_LENGTH = 12
 PASSWORD_MAX_LENGTH = 128
 password_hasher = PasswordHash.recommended()
-DUMMY_PASSWORD_HASH = password_hasher.hash("dummy-password-not-used")
+
+
+@lru_cache(maxsize=1)
+def _get_dummy_password_hash() -> str:
+    return password_hasher.hash("dummy-password-not-used")
 
 
 def validate_password(password: str) -> None:
@@ -29,7 +35,11 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str | None) -> bool:
-    return password_hasher.verify(password, password_hash or DUMMY_PASSWORD_HASH)
+    return password_hasher.verify(password, password_hash or _get_dummy_password_hash())
+
+
+async def verify_password_async(password: str, password_hash: str | None) -> bool:
+    return await asyncio.to_thread(verify_password, password, password_hash)
 
 
 def new_session_token() -> str:

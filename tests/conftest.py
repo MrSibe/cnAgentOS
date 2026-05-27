@@ -9,8 +9,8 @@ from cnagentos.db import Base
 from cnagentos.services.bootstrap import create_system_admin
 
 
-TEST_DATABASE_URL = "postgresql+asyncpg://cnagentos:cnagentos_dev@localhost:54329/cnagentos_test"
-ADMIN_DATABASE_URL = "postgresql+asyncpg://cnagentos:cnagentos_dev@localhost:54329/postgres"
+TEST_DATABASE_URL = "postgresql+asyncpg://cnagentos:cnagentos_dev@127.0.0.1:54329/cnagentos_test"
+ADMIN_DATABASE_URL = "postgresql+asyncpg://cnagentos:cnagentos_dev@127.0.0.1:54329/postgres"
 ADMIN_PASSWORD = "Admin-password-123"
 
 

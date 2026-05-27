@@ -16,7 +16,7 @@
 - 浏览器登录后通过服务端会话 Cookie 访问受保护接口。
 - 会话 Cookie 仅保存随机不透明令牌；生产环境 Cookie 名为 `__Host-cnagentos_session`，使用 `HttpOnly`、`Secure`、`SameSite=Lax` 与 `Path=/`。
 - 除登录外，本文接口均要求登录；后台接口还要求对应权限代码。
-- `POST`、`PUT`、`PATCH`、`DELETE` 请求必须以 `X-CSRF-Token` 请求头携带有效 CSRF token；该值由登录响应或 `GET /api/v1/auth/me` 获取。
+- 除公开登录外，已登录浏览器发起的 `POST`、`PUT`、`PATCH`、`DELETE` 请求必须以 `X-CSRF-Token` 请求头携带有效 CSRF token；该值由登录响应或 `GET /api/v1/auth/me` 获取。
 - 权限不足返回 HTTP `403`，未登录或会话失效返回 HTTP `401`。
 - 列表页面隐藏无权操作按钮不是授权机制，Controller 必须执行权限检查。
 

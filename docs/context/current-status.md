@@ -30,7 +30,7 @@ Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审�
 
 | 模块 | 目标 | 正式实现状态 |
 | --- | --- | --- |
-| 认证与基础 RBAC | 登录、用户、角色、权限、功能导航和访问控制 | `feat/phase-1-auth-rbac` 已实现，集成测试通过（13 条）；C 工作流页面已对接登录、导航、用户、角色、权限、功能导航和审计接口，并支持现有管理 API 的主要写操作 |
+| 认证与基础 RBAC | 登录、用户、角色、权限、功能导航和访问控制 | `feat/phase-1-auth-rbac` 已实现，集成测试通过（15 条）；C 工作流页面已对接登录、导航、用户、角色、权限、功能导航和审计接口，并支持现有管理 API 的主要写操作 |
 | 模型引擎 | 脱敏配置、默认模型、测试与调用统计 | 后端待开发；C 工作流保留模型配置和测试页面入口，等待 Phase 1 B 接入正式 API |
 | 智能瞭望 | 数据源、规则和采集任务 | 待开发 |
 | 数据仓库 | 标准化入库、去重和内容治理 | 待开发 |
@@ -52,7 +52,7 @@ Phase 1 A（平台与安全）后端已实现，Phase 1 C 管理端页面已接�
 
 | 模块 | 端点 | 状态 |
 | --- | --- | --- |
-| 认证 | `POST /api/v1/auth/login`、`POST /api/v1/auth/logout`、`GET /api/v1/auth/me`、`GET /api/v1/auth/navigation` | 已实现 |
+| 认证 | `POST /api/v1/auth/login`、`POST /api/v1/auth/logout`、`GET /api/v1/auth/me`、`GET /api/v1/auth/boot`、`GET /api/v1/auth/navigation` | 已实现 |
 | 用户管理 | `GET/POST /api/v1/admin/users`、`PATCH /users/{id}`、`PATCH /users/{id}/status`、`POST /users/{id}/password-reset` | 已实现 |
 | 角色权限 | `GET /api/v1/admin/permissions`、`GET/POST/PATCH/DELETE /api/v1/admin/roles` | 已实现 |
 | 导航管理 | `GET/POST/PATCH/DELETE /api/v1/admin/functions` | 已实现 |
@@ -60,10 +60,11 @@ Phase 1 A（平台与安全）后端已实现，Phase 1 C 管理端页面已接�
 
 **技术细节**：
 - 密码 Argon2id 慢哈希、会话令牌 SHA-256 存储、CSRF 双令牌（HMAC 派生）
+- 管理端初始化可通过 `/api/v1/auth/boot` 聚合读取用户与导航；接口鉴权仍实时依据当前角色和权限关联，撤权后续请求立即生效
 - 权限字典 13 项覆盖 platform/models/watch/data/qa/audit 六个模块
 - Bootstrap 数据：系统管理员角色、5 项系统导航（初始 disabled）
 - `create-system-admin` CLI 支持 `--username` / `--display-name` 和交互式或环境变量密码输入
-- 集成测试覆盖 13 条：CRUD、CSRF 校验、导航过滤、审计脱敏、权限拒绝、循环层级保护、系统角色保护
+- 集成测试覆盖 15 条：CRUD、CSRF 校验、导航过滤、审计脱敏、权限拒绝、即时撤权、并发管理员保护、循环层级保护、系统角色保护
 
 ## 维护要求
 
