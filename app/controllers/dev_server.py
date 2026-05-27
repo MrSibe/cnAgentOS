@@ -436,12 +436,17 @@ class DevRequestHandler(BaseHTTPRequestHandler):
                 file_path = STATIC_ROOT / "index.html"
 
         content = file_path.read_bytes()
-        content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+        content_type = self._content_type(file_path)
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", f"{content_type}; charset=utf-8" if content_type.startswith("text/") else content_type)
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)
+
+    def _content_type(self, file_path: Path) -> str:
+        if file_path.suffix == ".js":
+            return "text/javascript"
+        return mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
 
 
 def main() -> None:
