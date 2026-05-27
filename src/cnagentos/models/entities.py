@@ -43,6 +43,7 @@ class AuthSession(Base):
     user_agent: Mapped[str | None] = mapped_column(String(512))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    permissions: Mapped[dict | None] = mapped_column(JSON)
 
     user: Mapped[User] = relationship()
 

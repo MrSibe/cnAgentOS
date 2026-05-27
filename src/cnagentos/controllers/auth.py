@@ -78,6 +78,25 @@ async def me(request: Request, context: CurrentContext):
     )
 
 
+@router.get("/boot")
+async def boot(request: Request, session: DbSession, context: CurrentContext):
+    service = PlatformService(session, context.user)
+    navigation_data = await service.navigation_for(context.permissions)
+    return success_response(
+        request,
+        {
+            "user": {
+                "id": context.user.id,
+                "username": context.user.username,
+                "display_name": context.user.display_name,
+            },
+            "permissions": sorted(context.permissions),
+            "csrf_token": context.csrf_token,
+            "navigation": navigation_data,
+        },
+    )
+
+
 @router.get("/navigation")
 async def navigation(request: Request, session: DbSession, context: CurrentContext):
     service = PlatformService(session, context.user)
