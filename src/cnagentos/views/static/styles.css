@@ -114,6 +114,58 @@ button {
   min-height: 86px;
 }
 
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: -6px 0 14px;
+}
+
+.check-field {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 0 0 16px;
+  padding: 12px;
+}
+
+.check-field legend {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 0 4px;
+}
+
+.check-list {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.check-item input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex: 0 0 16px;
+}
+
+.check-item span {
+  display: grid;
+  gap: 2px;
+}
+
+.check-item small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .button-row {
   display: flex;
   gap: 10px;
@@ -149,6 +201,12 @@ button {
 
 .btn.danger {
   background: var(--accent);
+}
+
+.btn.small {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
 }
 
 .layout {
@@ -291,7 +349,7 @@ button {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 760px;
+  min-width: 940px;
 }
 
 th,
@@ -378,6 +436,10 @@ tr:last-child td {
   color: var(--muted);
 }
 
+.empty.compact {
+  padding: 4px 0;
+}
+
 .notice {
   background: #e9f4f2;
   color: var(--brand-strong);
@@ -404,6 +466,14 @@ tr:last-child td {
   gap: 8px;
   color: #344054;
   font-size: 14px;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 210px;
 }
 
 @media (max-width: 920px) {

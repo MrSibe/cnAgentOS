@@ -5,6 +5,12 @@ const state = {
   user: null,
   navigation: [],
   route: window.location.pathname === "/" || window.location.pathname === "/admin" ? "/admin/users" : window.location.pathname,
+  tableItems: [],
+  lookups: {
+    roles: null,
+    permissions: null,
+    functions: null,
+  },
 };
 
 const routes = {
@@ -20,7 +26,13 @@ const routes = {
       ["is_system_admin", "系统保护", (value) => (value ? badge("是", "warn") : badge("否", "off"))],
       ["updated_at", "更新时间", shortTime],
     ],
+    actions: [
+      ["edit", "编辑", "secondary"],
+      ["status", "启停", "secondary"],
+      ["reset", "重置密码", "danger"],
+    ],
     form: userForm,
+    handleAction: handleUserAction,
   },
   "/admin/roles": {
     title: "角色权限",
@@ -34,7 +46,12 @@ const routes = {
       ["status", "状态", statusBadge],
       ["is_system", "系统角色", (value) => (value ? badge("是", "warn") : badge("否", "off"))],
     ],
+    actions: [
+      ["edit", "编辑", "secondary"],
+      ["delete", "删除", "danger"],
+    ],
     form: roleForm,
+    handleAction: handleRoleAction,
   },
   "/admin/permissions": {
     title: "权限字典",
@@ -60,7 +77,13 @@ const routes = {
       ["status", "状态", statusBadge],
       ["sort_order", "排序"],
     ],
+    actions: [
+      ["edit", "编辑", "secondary"],
+      ["status", "启停", "secondary"],
+      ["delete", "删除", "danger"],
+    ],
     form: functionForm,
+    handleAction: handleFunctionAction,
   },
   "/admin/models": {
     title: "模型配置",
@@ -131,6 +154,12 @@ const api = {
   async create(path, data) {
     return this.request(path, { method: "POST", body: JSON.stringify(data) });
   },
+  async update(path, data) {
+    return this.request(path, { method: "PATCH", body: JSON.stringify(data) });
+  },
+  async delete(path) {
+    return this.request(path, { method: "DELETE" });
+  },
 };
 
 boot();
@@ -163,6 +192,7 @@ function renderLogin(error = "") {
         <form id="login-form">
           <label class="field"><span>登录名</span><input name="username" autocomplete="username" required value="admin" /></label>
           <label class="field"><span>密码</span><input name="password" type="password" autocomplete="current-password" required value="admin123" /></label>
+          <p class="hint">默认账号仅限本地开发环境。</p>
           <button class="btn" type="submit">登录</button>
         </form>
       </section>
@@ -228,9 +258,10 @@ function renderNavigation(nodes) {
       if (children.length) {
         return `<div class="nav-group"><div class="nav-parent">${escapeHtml(node.name)}</div>${renderNavigation(children)}</div>`;
       }
+      if (!node.route_path) return "";
       const active = state.route === node.route_path ? "active" : "";
       return `
-        <button class="nav-link ${active}" data-route="${escapeHtml(node.route_path || "/admin/models")}" type="button" title="${escapeHtml(node.name)}">
+        <button class="nav-link ${active}" data-route="${escapeHtml(node.route_path)}" type="button" title="${escapeHtml(node.name)}">
           ${icon(node.icon)}
           <span>${escapeHtml(node.name)}</span>
         </button>
@@ -272,32 +303,37 @@ async function loadRoute(route) {
   try {
     const payload = await route.loader();
     const items = payload.data || [];
+    state.tableItems = items;
+    const formHtml = route.form ? await route.form() : "";
     area.innerHTML = `
-      <section class="panel table-wrap">${renderTable(route.columns, items)}</section>
-      ${route.form ? `<aside class="panel form-panel">${route.form()}</aside>` : ""}
+      <section class="panel table-wrap">${renderTable(route, items)}</section>
+      ${route.form ? `<aside class="panel form-panel">${formHtml}</aside>` : ""}
     `;
     bindCreateForm();
+    bindRowActions(route);
   } catch (err) {
     area.innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`;
   }
 }
 
-function renderTable(columns, items) {
+function renderTable(route, items) {
   if (!items.length) return `<div class="empty">暂无数据</div>`;
+  const actionHeader = route.actions ? "<th>操作</th>" : "";
   return `
     <table>
-      <thead><tr>${columns.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join("")}</tr></thead>
+      <thead><tr>${route.columns.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join("")}${actionHeader}</tr></thead>
       <tbody>
         ${items
           .map(
             (item) => `
               <tr data-row="${escapeHtml(JSON.stringify(item).toLowerCase())}">
-                ${columns
+                ${route.columns
                   .map(([key, , formatter]) => {
                     const value = formatter ? formatter(item[key], item) : escapeHtml(item[key] ?? "-");
                     return `<td>${value}</td>`;
                   })
                   .join("")}
+                ${route.actions ? `<td>${renderActionButtons(route.actions, item)}</td>` : ""}
               </tr>
             `,
           )
@@ -307,46 +343,78 @@ function renderTable(columns, items) {
   `;
 }
 
+function renderActionButtons(actions, item) {
+  return `
+    <div class="row-actions">
+      ${actions
+        .map(([key, label, tone]) => `<button class="btn small ${tone || "secondary"}" data-action="${key}" data-id="${escapeHtml(item.id)}" type="button">${escapeHtml(label)}</button>`)
+        .join("")}
+    </div>
+  `;
+}
+
+function bindRowActions(route) {
+  if (!route.handleAction) return;
+  document.querySelectorAll("[data-action][data-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const item = state.tableItems.find((row) => row.id === button.dataset.id);
+      if (!item) return;
+      try {
+        await route.handleAction(button.dataset.action, item);
+      } catch (err) {
+        showFormError(err.message);
+      }
+    });
+  });
+}
+
 function updateActiveNavigation() {
   document.querySelectorAll("[data-route]").forEach((button) => {
     button.classList.toggle("active", button.dataset.route === state.route);
   });
 }
 
-function userForm() {
+async function userForm() {
+  const roles = await rolesLookup();
   return `
     <h2>新增用户</h2>
-    <form data-create="/api/v1/admin/users">
+    <form data-create="/api/v1/admin/users" data-array-fields="role_ids">
       <label class="field"><span>登录名</span><input name="username" required /></label>
       <label class="field"><span>展示名称</span><input name="display_name" required /></label>
       <label class="field"><span>初始密码</span><input name="password" type="password" required /></label>
+      ${checkboxList("角色", "role_ids", roles, [])}
       <button class="btn" type="submit">创建</button>
     </form>
   `;
 }
 
-function roleForm() {
+async function roleForm() {
+  const permissions = await permissionsLookup();
   return `
     <h2>新增角色</h2>
-    <form data-create="/api/v1/admin/roles">
+    <form data-create="/api/v1/admin/roles" data-array-fields="permission_ids">
       <label class="field"><span>角色代码</span><input name="code" required /></label>
       <label class="field"><span>名称</span><input name="name" required /></label>
       <label class="field"><span>说明</span><textarea name="description"></textarea></label>
+      ${checkboxList("权限", "permission_ids", permissions, [])}
       <button class="btn" type="submit">创建</button>
     </form>
   `;
 }
 
-function functionForm() {
+async function functionForm() {
+  const functions = await functionsLookup();
+  const permissions = await permissionsLookup();
   return `
     <h2>新增功能</h2>
     <form data-create="/api/v1/admin/functions">
       <label class="field"><span>功能代码</span><input name="code" required /></label>
       <label class="field"><span>名称</span><input name="name" required /></label>
-      <label class="field"><span>页面路径</span><input name="route_path" placeholder="/admin/example" /></label>
-      <label class="field"><span>图标</span><input name="icon" value="circle" /></label>
-      <label class="field"><span>所需权限</span><input name="required_permission_code" /></label>
-      <label class="field"><span>排序</span><input name="sort_order" type="number" value="100" /></label>
+      <label class="field"><span>父级功能</span><select name="parent_id" data-nullable="true">${options(functions, "", "无父级")}</select></label>
+      <label class="field"><span>页面路径</span><input name="route_path" placeholder="/admin/example" data-nullable="true" /></label>
+      <label class="field"><span>图标</span><input name="icon" value="circle" data-nullable="true" /></label>
+      <label class="field"><span>所需权限</span><select name="required_permission_code" data-nullable="true">${options(permissions, "", "无需权限", "code")}</select></label>
+      <label class="field"><span>排序</span><input name="sort_order" type="number" value="100" data-type="number" /></label>
       <button class="btn" type="submit">创建</button>
     </form>
   `;
@@ -360,7 +428,7 @@ function modelForm() {
       <label class="field"><span>模型名</span><input name="model_name" required /></label>
       <label class="field"><span>Base URL</span><input name="base_url" type="url" required placeholder="https://provider.example/v1" /></label>
       <label class="field"><span>API Key</span><input name="api_key" type="password" autocomplete="new-password" /></label>
-      <label class="field"><span>超时秒数</span><input name="timeout_seconds" type="number" value="60" min="1" /></label>
+      <label class="field"><span>超时秒数</span><input name="timeout_seconds" type="number" value="60" min="1" data-type="number" /></label>
       <label class="field"><span>说明</span><textarea name="description"></textarea></label>
       <button class="btn" type="submit">创建</button>
     </form>
@@ -381,6 +449,159 @@ function modelTestPanel(container) {
   `;
   document.querySelector("#normal-test-button").addEventListener("click", runNormalTest);
   document.querySelector("#stream-test-button").addEventListener("click", runStreamTest);
+}
+
+async function handleUserAction(action, item) {
+  if (action === "edit") {
+    const roles = await rolesLookup(true);
+    showEditPanel(`
+      <h2>编辑用户</h2>
+      <form id="edit-form" data-array-fields="role_ids">
+        <label class="field"><span>登录名</span><input value="${escapeHtml(item.username)}" disabled /></label>
+        <label class="field"><span>展示名称</span><input name="display_name" required value="${escapeHtml(item.display_name)}" /></label>
+        ${checkboxList("角色", "role_ids", roles, (item.roles || []).map((role) => role.id))}
+        <div class="button-row">
+          <button class="btn" type="submit">保存</button>
+          <button class="btn secondary" type="button" data-cancel-edit>取消</button>
+        </div>
+      </form>
+    `);
+    bindEditSubmit(async (form) => {
+      await api.update(`/api/v1/admin/users/${encodeURIComponent(item.id)}`, collectFormData(form));
+    });
+    return;
+  }
+  if (action === "status") {
+    const nextStatus = item.status === "active" ? "disabled" : "active";
+    if (!window.confirm(`确认将用户 ${item.username} 改为 ${nextStatus}？`)) return;
+    await api.update(`/api/v1/admin/users/${encodeURIComponent(item.id)}/status`, { status: nextStatus });
+    await renderPage();
+    return;
+  }
+  if (action === "reset") {
+    const newPassword = window.prompt(`为用户 ${item.username} 设置新密码`);
+    if (!newPassword) return;
+    await api.create(`/api/v1/admin/users/${encodeURIComponent(item.id)}/password-reset`, { new_password: newPassword });
+    showNotice("密码已重置。");
+  }
+}
+
+async function handleRoleAction(action, item) {
+  if (action === "edit") {
+    const permissions = await permissionsLookup(true);
+    const grantedIds = permissions.filter((permission) => (item.permissions || []).includes(permission.code)).map((permission) => permission.id);
+    showEditPanel(`
+      <h2>编辑角色</h2>
+      <form id="edit-form" data-array-fields="permission_ids">
+        <label class="field"><span>角色代码</span><input value="${escapeHtml(item.code)}" disabled /></label>
+        <label class="field"><span>名称</span><input name="name" required value="${escapeHtml(item.name)}" /></label>
+        <label class="field"><span>说明</span><textarea name="description">${escapeHtml(item.description || "")}</textarea></label>
+        <label class="field"><span>状态</span><select name="status">${statusOptions(item.status)}</select></label>
+        ${checkboxList("权限", "permission_ids", permissions, grantedIds)}
+        <div class="button-row">
+          <button class="btn" type="submit">保存</button>
+          <button class="btn secondary" type="button" data-cancel-edit>取消</button>
+        </div>
+      </form>
+    `);
+    bindEditSubmit(async (form) => {
+      await api.update(`/api/v1/admin/roles/${encodeURIComponent(item.id)}`, collectFormData(form));
+    });
+    return;
+  }
+  if (action === "delete") {
+    if (!window.confirm(`确认删除角色 ${item.code}？`)) return;
+    await api.delete(`/api/v1/admin/roles/${encodeURIComponent(item.id)}`);
+    await renderPage();
+  }
+}
+
+async function handleFunctionAction(action, item) {
+  if (action === "edit") {
+    const functions = (await functionsLookup(true)).filter((functionItem) => functionItem.id !== item.id);
+    const permissions = await permissionsLookup(true);
+    showEditPanel(`
+      <h2>编辑功能</h2>
+      <form id="edit-form">
+        <label class="field"><span>功能代码</span><input value="${escapeHtml(item.code)}" disabled /></label>
+        <label class="field"><span>名称</span><input name="name" required value="${escapeHtml(item.name)}" /></label>
+        <label class="field"><span>父级功能</span><select name="parent_id" data-nullable="true">${options(functions, item.parent_id || "", "无父级")}</select></label>
+        <label class="field"><span>页面路径</span><input name="route_path" value="${escapeHtml(item.route_path || "")}" data-nullable="true" /></label>
+        <label class="field"><span>图标</span><input name="icon" value="${escapeHtml(item.icon || "")}" data-nullable="true" /></label>
+        <label class="field"><span>所需权限</span><select name="required_permission_code" data-nullable="true">${options(permissions, item.required_permission_code || "", "无需权限", "code")}</select></label>
+        <label class="field"><span>排序</span><input name="sort_order" type="number" value="${escapeHtml(item.sort_order ?? 0)}" data-type="number" /></label>
+        <label class="field"><span>状态</span><select name="status">${statusOptions(item.status)}</select></label>
+        <div class="button-row">
+          <button class="btn" type="submit">保存</button>
+          <button class="btn secondary" type="button" data-cancel-edit>取消</button>
+        </div>
+      </form>
+    `);
+    bindEditSubmit(async (form) => {
+      await api.update(`/api/v1/admin/functions/${encodeURIComponent(item.id)}`, collectFormData(form));
+      state.lookups.functions = null;
+    });
+    return;
+  }
+  if (action === "status") {
+    const nextStatus = item.status === "active" ? "disabled" : "active";
+    if (!window.confirm(`确认将功能 ${item.code} 改为 ${nextStatus}？`)) return;
+    await api.update(`/api/v1/admin/functions/${encodeURIComponent(item.id)}`, { status: nextStatus });
+    state.lookups.functions = null;
+    await renderPage();
+    return;
+  }
+  if (action === "delete") {
+    if (!window.confirm(`确认删除功能 ${item.code}？`)) return;
+    await api.delete(`/api/v1/admin/functions/${encodeURIComponent(item.id)}`);
+    state.lookups.functions = null;
+    await renderPage();
+  }
+}
+
+function showEditPanel(html) {
+  const panel = document.querySelector(".form-panel");
+  if (!panel) return;
+  panel.innerHTML = html;
+  panel.querySelector("[data-cancel-edit]")?.addEventListener("click", renderPage);
+}
+
+function bindEditSubmit(onSubmit) {
+  const form = document.querySelector("#edit-form");
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearFormMessages(form);
+    try {
+      await onSubmit(form);
+      await renderPage();
+    } catch (err) {
+      form.insertAdjacentHTML("afterbegin", `<div class="error">${escapeHtml(err.message)}</div>`);
+    }
+  });
+}
+
+async function rolesLookup(force = false) {
+  if (!state.lookups.roles || force) {
+    const payload = await api.list("/api/v1/admin/roles?page_size=100&status=active");
+    state.lookups.roles = payload.data || [];
+  }
+  return state.lookups.roles;
+}
+
+async function permissionsLookup(force = false) {
+  if (!state.lookups.permissions || force) {
+    const payload = await api.list("/api/v1/admin/permissions");
+    state.lookups.permissions = payload.data || [];
+  }
+  return state.lookups.permissions;
+}
+
+async function functionsLookup(force = false) {
+  if (!state.lookups.functions || force) {
+    const payload = await api.list("/api/v1/admin/functions");
+    state.lookups.functions = payload.data || [];
+  }
+  return state.lookups.functions;
 }
 
 async function runNormalTest() {
@@ -418,6 +639,7 @@ async function runStreamTest() {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replaceAll("\r\n", "\n");
       const events = buffer.split("\n\n");
       buffer = events.pop() || "";
       events.forEach((raw) => applySseEvent(raw, output));
@@ -428,7 +650,7 @@ async function runStreamTest() {
 }
 
 function applySseEvent(raw, output) {
-  const lines = raw.split("\n");
+  const lines = raw.replaceAll("\r\n", "\n").split("\n");
   const event = lines.find((line) => line.startsWith("event:"))?.slice(6).trim();
   const dataLine = lines.find((line) => line.startsWith("data:"))?.slice(5).trim();
   if (!event || !dataLine) return;
@@ -442,15 +664,42 @@ function bindCreateForm() {
   document.querySelectorAll("form[data-create]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const data = Object.fromEntries(new FormData(form).entries());
+      clearFormMessages(form);
       try {
-        await api.create(form.dataset.create, data);
+        await api.create(form.dataset.create, collectFormData(form));
         await renderPage();
       } catch (err) {
         form.insertAdjacentHTML("afterbegin", `<div class="error">${escapeHtml(err.message)}</div>`);
       }
     });
   });
+}
+
+function collectFormData(form) {
+  const formData = new FormData(form);
+  const arrayFields = (form.dataset.arrayFields || "").split(",").map((item) => item.trim()).filter(Boolean);
+  const data = {};
+  const namedControls = Array.from(form.querySelectorAll("[name]"));
+  const fieldNames = [...new Set(namedControls.map((control) => control.name))];
+  fieldNames.forEach((name) => {
+    const control = namedControls.find((item) => item.name === name);
+    if (arrayFields.includes(name)) {
+      data[name] = formData.getAll(name);
+      return;
+    }
+    let value = formData.get(name);
+    if (control?.dataset.type === "number") {
+      value = value === "" ? 0 : Number(value);
+    }
+    if (control?.dataset.nullable === "true" && value === "") {
+      value = null;
+    }
+    data[name] = value;
+  });
+  arrayFields.forEach((name) => {
+    if (!Object.prototype.hasOwnProperty.call(data, name)) data[name] = [];
+  });
+  return data;
 }
 
 async function logout() {
@@ -465,6 +714,61 @@ function filterRows(value) {
   document.querySelectorAll("tbody tr").forEach((row) => {
     row.style.display = row.dataset.row.includes(needle) ? "" : "none";
   });
+}
+
+function checkboxList(label, name, items, selectedIds) {
+  const selected = new Set(selectedIds || []);
+  const body = items.length
+    ? items
+        .map(
+          (item) => `
+            <label class="check-item">
+              <input type="checkbox" name="${escapeHtml(name)}" value="${escapeHtml(item.id)}" ${selected.has(item.id) ? "checked" : ""} />
+              <span>${escapeHtml(item.name)}<small>${escapeHtml(item.code || "")}</small></span>
+            </label>
+          `,
+        )
+        .join("")
+    : `<div class="empty compact">暂无可选项</div>`;
+  return `
+    <fieldset class="check-field">
+      <legend>${escapeHtml(label)}</legend>
+      <div class="check-list">${body}</div>
+    </fieldset>
+  `;
+}
+
+function options(items, selectedValue = "", emptyLabel = "", valueKey = "id") {
+  const selected = String(selectedValue || "");
+  const emptyOption = emptyLabel ? `<option value="" ${selected === "" ? "selected" : ""}>${escapeHtml(emptyLabel)}</option>` : "";
+  return `${emptyOption}${items
+    .map((item) => {
+      const value = String(item[valueKey] || "");
+      const label = item.code ? `${item.name} (${item.code})` : item.name;
+      return `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    })
+    .join("")}`;
+}
+
+function statusOptions(value) {
+  return `
+    <option value="active" ${value === "active" ? "selected" : ""}>active</option>
+    <option value="disabled" ${value === "disabled" ? "selected" : ""}>disabled</option>
+  `;
+}
+
+function showNotice(message) {
+  const panel = document.querySelector(".form-panel");
+  panel?.insertAdjacentHTML("afterbegin", `<div class="notice">${escapeHtml(message)}</div>`);
+}
+
+function showFormError(message) {
+  const panel = document.querySelector(".form-panel") || document.querySelector("#content-area");
+  panel?.insertAdjacentHTML("afterbegin", `<div class="error">${escapeHtml(message)}</div>`);
+}
+
+function clearFormMessages(form) {
+  form.querySelectorAll(".error, .notice").forEach((node) => node.remove());
 }
 
 function badge(text, type = "") {
@@ -488,7 +792,7 @@ function shortTime(value) {
 }
 
 function icon(name = "circle") {
-  const id = `icon-${name}`;
+  const id = `icon-${name || "circle"}`;
   return `<svg aria-hidden="true"><use href="#${escapeHtml(id)}"></use></svg>`;
 }
 
