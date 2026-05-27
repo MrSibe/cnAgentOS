@@ -1,5 +1,4 @@
-def main():
-    print("Hello from cnagentos!")
+from app.controllers.dev_server import main
 
 
 if __name__ == "__main__":
