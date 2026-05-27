@@ -13,7 +13,7 @@ from cnagentos.security import (
     csrf_token_for_session,
     hash_token,
     new_session_token,
-    verify_password,
+    verify_password_async,
 )
 
 
@@ -45,7 +45,7 @@ async def login(
     user_agent: str | None,
 ) -> tuple[User, str, str]:
     user = await session.scalar(select(User).where(User.username == username))
-    valid_password = verify_password(password, user.password_hash if user else None)
+    valid_password = await verify_password_async(password, user.password_hash if user else None)
     if user is None or not valid_password or user.status != "active":
         raise ApiError(401, "LOGIN_FAILED", "用户名或密码错误")
 
