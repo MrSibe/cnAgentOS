@@ -506,14 +506,14 @@ async function handleRoleAction(action, item) {
     `);
     bindEditSubmit(async (form) => {
       await api.update(`/api/v1/admin/roles/${encodeURIComponent(item.id)}`, collectFormData(form));
-      invalidateLookupsForMutation("/api/v1/admin/roles");
+      await afterAdminMutation("/api/v1/admin/roles");
     });
     return;
   }
   if (action === "delete") {
     if (!window.confirm(`确认删除角色 ${item.code}？`)) return;
     await api.delete(`/api/v1/admin/roles/${encodeURIComponent(item.id)}`);
-    invalidateLookupsForMutation("/api/v1/admin/roles");
+    await afterAdminMutation("/api/v1/admin/roles");
     await renderPage();
   }
 }
@@ -541,7 +541,7 @@ async function handleFunctionAction(action, item) {
     `);
     bindEditSubmit(async (form) => {
       await api.update(`/api/v1/admin/functions/${encodeURIComponent(item.id)}`, collectFormData(form));
-      invalidateLookupsForMutation("/api/v1/admin/functions");
+      await afterAdminMutation("/api/v1/admin/functions");
     });
     return;
   }
@@ -549,14 +549,14 @@ async function handleFunctionAction(action, item) {
     const nextStatus = item.status === "active" ? "disabled" : "active";
     if (!window.confirm(`确认将功能 ${item.code} 改为 ${nextStatus}？`)) return;
     await api.update(`/api/v1/admin/functions/${encodeURIComponent(item.id)}`, { status: nextStatus });
-    invalidateLookupsForMutation("/api/v1/admin/functions");
+    await afterAdminMutation("/api/v1/admin/functions");
     await renderPage();
     return;
   }
   if (action === "delete") {
     if (!window.confirm(`确认删除功能 ${item.code}？`)) return;
     await api.delete(`/api/v1/admin/functions/${encodeURIComponent(item.id)}`);
-    invalidateLookupsForMutation("/api/v1/admin/functions");
+    await afterAdminMutation("/api/v1/admin/functions");
     await renderPage();
   }
 }
@@ -613,6 +613,19 @@ function invalidateLookupsForMutation(path) {
   if (path.startsWith("/api/v1/admin/functions")) {
     state.lookups.functions = null;
   }
+}
+
+async function afterAdminMutation(path) {
+  invalidateLookupsForMutation(path);
+  if (path.startsWith("/api/v1/admin/roles") || path.startsWith("/api/v1/admin/functions")) {
+    await refreshNavigation();
+  }
+}
+
+async function refreshNavigation() {
+  state.navigation = (await api.request("/api/v1/auth/navigation")).data;
+  renderShell();
+  updateActiveNavigation();
 }
 
 async function runNormalTest() {
@@ -678,7 +691,7 @@ function bindCreateForm() {
       clearFormMessages(form);
       try {
         await api.create(form.dataset.create, collectFormData(form));
-        invalidateLookupsForMutation(form.dataset.create);
+        await afterAdminMutation(form.dataset.create);
         await renderPage();
       } catch (err) {
         form.insertAdjacentHTML("afterbegin", `<div class="error">${escapeHtml(err.message)}</div>`);
