@@ -506,12 +506,14 @@ async function handleRoleAction(action, item) {
     `);
     bindEditSubmit(async (form) => {
       await api.update(`/api/v1/admin/roles/${encodeURIComponent(item.id)}`, collectFormData(form));
+      invalidateLookupsForMutation("/api/v1/admin/roles");
     });
     return;
   }
   if (action === "delete") {
     if (!window.confirm(`确认删除角色 ${item.code}？`)) return;
     await api.delete(`/api/v1/admin/roles/${encodeURIComponent(item.id)}`);
+    invalidateLookupsForMutation("/api/v1/admin/roles");
     await renderPage();
   }
 }
@@ -539,7 +541,7 @@ async function handleFunctionAction(action, item) {
     `);
     bindEditSubmit(async (form) => {
       await api.update(`/api/v1/admin/functions/${encodeURIComponent(item.id)}`, collectFormData(form));
-      state.lookups.functions = null;
+      invalidateLookupsForMutation("/api/v1/admin/functions");
     });
     return;
   }
@@ -547,14 +549,14 @@ async function handleFunctionAction(action, item) {
     const nextStatus = item.status === "active" ? "disabled" : "active";
     if (!window.confirm(`确认将功能 ${item.code} 改为 ${nextStatus}？`)) return;
     await api.update(`/api/v1/admin/functions/${encodeURIComponent(item.id)}`, { status: nextStatus });
-    state.lookups.functions = null;
+    invalidateLookupsForMutation("/api/v1/admin/functions");
     await renderPage();
     return;
   }
   if (action === "delete") {
     if (!window.confirm(`确认删除功能 ${item.code}？`)) return;
     await api.delete(`/api/v1/admin/functions/${encodeURIComponent(item.id)}`);
-    state.lookups.functions = null;
+    invalidateLookupsForMutation("/api/v1/admin/functions");
     await renderPage();
   }
 }
@@ -602,6 +604,15 @@ async function functionsLookup(force = false) {
     state.lookups.functions = payload.data || [];
   }
   return state.lookups.functions;
+}
+
+function invalidateLookupsForMutation(path) {
+  if (path.startsWith("/api/v1/admin/roles")) {
+    state.lookups.roles = null;
+  }
+  if (path.startsWith("/api/v1/admin/functions")) {
+    state.lookups.functions = null;
+  }
 }
 
 async function runNormalTest() {
@@ -667,6 +678,7 @@ function bindCreateForm() {
       clearFormMessages(form);
       try {
         await api.create(form.dataset.create, collectFormData(form));
+        invalidateLookupsForMutation(form.dataset.create);
         await renderPage();
       } catch (err) {
         form.insertAdjacentHTML("afterbegin", `<div class="error">${escapeHtml(err.message)}</div>`);
