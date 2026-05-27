@@ -206,12 +206,15 @@ class PlatformService:
         if user is None:
             raise ApiError(404, "NOT_FOUND", "用户不存在")
         if status == "disabled" and user.is_system_admin and user.status == "active":
-            active_admins = await self.session.scalar(
-                select(func.count())
-                .select_from(User)
-                .where(User.is_system_admin.is_(True), User.status == "active")
-            )
-            if int(active_admins or 0) <= 1:
+            active_admins = (
+                await self.session.scalars(
+                    select(User.id)
+                    .where(User.is_system_admin.is_(True), User.status == "active")
+                    .order_by(User.id)
+                    .with_for_update()
+                )
+            ).all()
+            if len(active_admins) <= 1:
                 raise ApiError(409, "INVALID_STATE", "不得停用最后一个系统管理员")
         user.status = status
         if status == "disabled":

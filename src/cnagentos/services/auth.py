@@ -51,7 +51,6 @@ async def login(
 
     raw_token = new_session_token()
     csrf_token = csrf_token_for_session(raw_token, settings.csrf_secret)
-    permissions = sorted(await get_permission_codes(session, user.id))
     auth_session = AuthSession(
         id=str(uuid4()),
         user_id=user.id,
@@ -60,7 +59,6 @@ async def login(
         expires_at=utc_now() + timedelta(hours=settings.session_hours),
         ip_address=ip_address,
         user_agent=(user_agent or "")[:512] or None,
-        permissions={"codes": permissions},
     )
     user.last_login_at = utc_now()
     session.add(auth_session)
@@ -91,9 +89,7 @@ async def load_context(
     if auth_session.csrf_secret_hash != hash_token(csrf_token):
         raise ApiError(401, "AUTH_REQUIRED", "登录状态已失效")
 
-    permissions: set[str] = set()
-    if auth_session.permissions and isinstance(auth_session.permissions.get("codes"), list):
-        permissions = set(auth_session.permissions["codes"])
+    permissions = await get_permission_codes(session, auth_session.user_id)
 
     last_seen = auth_session.last_seen_at
     if last_seen is None or (now - last_seen).total_seconds() >= 300:
