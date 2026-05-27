@@ -135,7 +135,32 @@ const api = {
 
 boot();
 
+function initTheme() {
+  const saved = localStorage.getItem("theme");
+  if (saved === "dark") {
+    document.documentElement.classList.add("dark");
+    document.documentElement.classList.remove("light");
+  } else if (saved === "light") {
+    document.documentElement.classList.add("light");
+    document.documentElement.classList.remove("dark");
+  }
+}
+
+function toggleTheme() {
+  const html = document.documentElement;
+  if (html.classList.contains("dark")) {
+    html.classList.remove("dark");
+    html.classList.add("light");
+    localStorage.setItem("theme", "light");
+  } else {
+    html.classList.add("dark");
+    html.classList.remove("light");
+    localStorage.setItem("theme", "dark");
+  }
+}
+
 async function boot() {
+  initTheme();
   document.body.insertAdjacentHTML("afterbegin", document.querySelector("#icon-sprite").innerHTML);
   try {
     const payload = (await api.request("/api/v1/auth/boot")).data;
@@ -191,6 +216,7 @@ function renderLogin(error = "") {
 }
 
 function renderShell() {
+  const isDark = document.documentElement.classList.contains("dark");
   app.innerHTML = `
     <div class="layout">
       <aside class="sidebar">
@@ -198,21 +224,34 @@ function renderShell() {
           <div class="brand-logo">CN</div>
           <div>
             <div class="brand-title">cnAgentOS</div>
-            <div class="brand-subtitle">Phase 1</div>
+            <div class="brand-subtitle">后台管理系统</div>
           </div>
         </div>
         <nav>${renderNavigation(state.navigation)}</nav>
+        <div class="sidebar-footer">
+          <button class="theme-toggle" id="theme-toggle" type="button">
+            ${icon(isDark ? "sun" : "moon")}
+            <span>${isDark ? "亮色模式" : "深色模式"}</span>
+          </button>
+        </div>
       </aside>
       <section class="main">
         <header class="topbar">
           <div class="user-chip">${escapeHtml(state.user?.display_name || "用户")} · ${escapeHtml(state.user?.username || "")}</div>
-          <button class="btn secondary" id="logout-button" type="button">退出</button>
+          <div class="topbar-actions">
+            <button class="btn secondary" id="logout-button" type="button">退出</button>
+          </div>
         </header>
         <main class="page" id="page"></main>
       </section>
     </div>
   `;
   document.querySelector("#logout-button").addEventListener("click", logout);
+  document.querySelector("#theme-toggle").addEventListener("click", () => {
+    toggleTheme();
+    renderShell();
+    renderPage();
+  });
   document.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.route = button.dataset.route;
@@ -223,16 +262,16 @@ function renderShell() {
   });
 }
 
-function renderNavigation(nodes) {
+function renderNavigation(nodes, depth = 0) {
   return nodes
     .map((node) => {
       const children = node.children || [];
       if (children.length) {
-        return `<div class="nav-group"><div class="nav-parent">${escapeHtml(node.name)}</div>${renderNavigation(children)}</div>`;
+        return `<div class="nav-group"><div class="nav-parent">${escapeHtml(node.name)}</div>${renderNavigation(children, depth + 1)}</div>`;
       }
       const active = state.route === node.route_path ? "active" : "";
       return `
-        <button class="nav-link ${active}" data-route="${escapeHtml(node.route_path || "/admin/models")}" type="button" title="${escapeHtml(node.name)}">
+        <button class="nav-link ${active}" data-depth="${depth}" data-route="${escapeHtml(node.route_path || "/admin/models")}" type="button" title="${escapeHtml(node.name)}">
           ${icon(node.icon)}
           <span>${escapeHtml(node.name)}</span>
         </button>

@@ -89,7 +89,7 @@ async def initialize_reference_data(session: AsyncSession) -> Role:
                 icon=icon,
                 sort_order=sort_order,
                 required_permission_code=required_code,
-                status="disabled",
+                status="active",
                 is_system=True,
             )
             session.add(function)
