@@ -50,10 +50,13 @@
     "id":"uuid",
     "username":"operator",
     "display_name":"运营管理员",
-    "permissions":["models.view","qa.use"]
+    "permissions":["models.view","qa.use"],
+    "csrf_token":"<token>"
   }
 }
 ```
+
+规则：页面刷新或重新初始化后通过本接口获取当前会话的 CSRF token，前端不得持久化会话 Cookie 内容。
 
 ### `GET /api/v1/auth/navigation`
 
