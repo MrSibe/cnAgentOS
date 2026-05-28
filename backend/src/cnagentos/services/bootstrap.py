@@ -39,6 +39,9 @@ SYSTEM_FUNCTIONS = [
         "functions.manage",
     ),
     ("admin_audit", "审计日志", "admin", "/admin/audit-logs", "history", 40, "audit.view"),
+    ("admin_model_engine", "模型引擎", None, None, "cpu", 50, None),
+    ("admin_models", "模型配置", "admin_model_engine", "/admin/models", "settings", 10, "models.view"),
+    ("admin_model_calls", "调用记录", "admin_model_engine", "/admin/model-calls", "activity", 20, "models.view"),
 ]
 
 
