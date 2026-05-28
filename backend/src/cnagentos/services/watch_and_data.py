@@ -87,7 +87,7 @@ class WatchService:
             )
         )
 
-    async def _serialize_source(self, source: WatchSource) -> dict:
+    def _serialize_source(self, source: WatchSource) -> dict:
         return {
             "id": source.id,
             "name": source.name,
@@ -102,7 +102,7 @@ class WatchService:
             "updated_at": source.updated_at,
         }
 
-    async def _serialize_rule(self, rule: WatchRule) -> dict:
+    def _serialize_rule(self, rule: WatchRule) -> dict:
         return {
             "id": rule.id,
             "source_id": rule.source_id,
@@ -128,7 +128,7 @@ class WatchService:
                 | WatchSource.entry_url.ilike(f"%{q}%")
             )
         if status:
-            if status not in VALID_SOURCE_TYPES:
+            if status not in VALID_SOURCE_STATUSES:
                 raise ApiError(400, "VALIDATION_ERROR", "请求参数无效", {"status": "无效状态"})
             conditions.append(WatchSource.status == status)
         if source_type:
@@ -147,7 +147,7 @@ class WatchService:
                 .limit(page_size)
             )
         ).all()
-        return [await self._serialize_source(s) for s in sources], int(total or 0)
+        return [self._serialize_source(s) for s in sources], int(total or 0)
 
     async def create_source(self, payload: WatchSourceCreate) -> dict:
         try:
@@ -176,13 +176,13 @@ class WatchService:
         self.session.add(source)
         await self._audit("watch.source.created", "watch_source", source.id, "succeeded", {"name": source.name})
         await self.session.commit()
-        return await self._serialize_source(source)
+        return self._serialize_source(source)
 
     async def get_source(self, source_id: str) -> dict:
         source = await self.session.get(WatchSource, source_id)
         if source is None:
             raise ApiError(404, "NOT_FOUND", "数据源不存在")
-        return await self._serialize_source(source)
+        return self._serialize_source(source)
 
     async def update_source(self, source_id: str, payload: WatchSourceUpdate) -> dict:
         source = await self.session.get(WatchSource, source_id)
@@ -213,7 +213,7 @@ class WatchService:
 
         await self._audit("watch.source.updated", "watch_source", source.id, "succeeded")
         await self.session.commit()
-        return await self._serialize_source(source)
+        return self._serialize_source(source)
 
     async def update_source_status(self, source_id: str, status: str) -> dict:
         if status not in VALID_SOURCE_STATUSES:
@@ -241,22 +241,27 @@ class WatchService:
             {"status": status},
         )
         await self.session.commit()
-        return await self._serialize_source(source)
+        return self._serialize_source(source)
 
     # --- Watch Rules CRUD ---
-    async def list_rules(self, source_id: str) -> list[dict]:
+    async def list_rules(self, source_id: str, page: int = 1, page_size: int = 20) -> tuple[list[dict], int]:
         source = await self.session.get(WatchSource, source_id)
         if source is None:
             raise ApiError(404, "NOT_FOUND", "数据源不存在")
 
+        total = await self.session.scalar(
+            select(func.count()).select_from(WatchRule).where(WatchRule.source_id == source_id)
+        )
         rules = (
             await self.session.scalars(
                 select(WatchRule)
                 .where(WatchRule.source_id == source_id)
                 .order_by(WatchRule.created_at.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
             )
         ).all()
-        return [await self._serialize_rule(r) for r in rules]
+        return [self._serialize_rule(r) for r in rules], int(total or 0)
 
     async def create_rule(self, source_id: str, payload: WatchRuleCreate) -> dict:
         source = await self.session.get(WatchSource, source_id)
@@ -283,7 +288,7 @@ class WatchService:
         self.session.add(rule)
         await self._audit("watch.rule.created", "watch_rule", rule.id, "succeeded", {"name": rule.name})
         await self.session.commit()
-        return await self._serialize_rule(rule)
+        return self._serialize_rule(rule)
 
     async def update_rule(self, rule_id: str, payload: WatchRuleUpdate) -> dict:
         rule = await self.session.get(WatchRule, rule_id)
@@ -322,7 +327,7 @@ class WatchService:
 
         await self._audit("watch.rule.updated", "watch_rule", rule.id, "succeeded")
         await self.session.commit()
-        return await self._serialize_rule(rule)
+        return self._serialize_rule(rule)
 
     # --- Collection Tasks ---
     async def create_task(self, payload: CollectionTaskCreate) -> dict:
@@ -428,9 +433,6 @@ class WatchService:
         if task is None:
             raise ApiError(404, "NOT_FOUND", "任务不存在")
 
-        await self.session.scalars(
-            select(CollectionTaskSource).where(CollectionTaskSource.task_id == task_id)
-        )
         task_sources = (
             await self.session.scalars(
                 select(CollectionTaskSource)
@@ -549,8 +551,24 @@ class WatchService:
         if not source or not rule:
             return 0, 1, "数据源或规则不存在"
 
-        headers = {"Accept": "text/html,application/json", **rule.request_headers} if rule.request_headers else {}
+        try:
+            validate_url(source.entry_url, source.allowed_hosts)
+        except SSRFValidationError as e:
+            return 0, 1, f"SSRF校验失败: {e.reason}"
+
+        headers = {"Accept": "text/html,application/json", **rule.request_headers} if rule.request_headers else {"Accept": "text/html,application/json"}
         params = rule.request_params or {}
+
+        auth_headers = {}
+        if source.auth_ciphertext:
+            try:
+                auth_json = decrypt(source.auth_ciphertext)
+                auth_config = json.loads(auth_json)
+                if auth_config.get("headers"):
+                    auth_headers.update(auth_config["headers"])
+            except Exception:
+                pass
+        headers.update(auth_headers)
 
         try:
             async with httpx.AsyncClient(timeout=30) as client:

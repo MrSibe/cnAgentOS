@@ -5,8 +5,6 @@ Implements security checks for URLs and hosts according to the security baseline
 """
 
 import ipaddress
-import re
-from typing import Set
 from urllib.parse import urlparse
 
 PRIVATE_NETWORKS = [
@@ -105,9 +103,21 @@ def _is_ip_allowed(ip_str: str, allowed_hosts: list[str]) -> bool:
 
     for private_network in PRIVATE_NETWORKS:
         if ip in private_network:
+            # Allow if it's in the user's explicit allowed_hosts
+            for allowed in allowed_hosts:
+                if is_ip_address(allowed):
+                    if ip == ipaddress.ip_address(allowed):
+                        return True
+                else:
+                    try:
+                        network = ipaddress.ip_network(allowed, strict=False)
+                        if ip in network:
+                            return True
+                    except ValueError:
+                        continue
             return False
 
-    return False
+    return True
 
 
 def validate_url(url: str, allowed_hosts: list[str]) -> None:
@@ -142,18 +152,8 @@ def validate_url(url: str, allowed_hosts: list[str]) -> None:
             "METADATA_HOST_BLOCKED"
         )
 
-    # Check if host is in allowed_hosts and is not a private IP
-    allowed_hosts_lower = [h.lower() for h in allowed_hosts]
-    if host.lower() in allowed_hosts_lower:
-        # Even if host is in allowed list, check if it's a private IP
-        if is_ip_address(host):
-            if not _is_ip_allowed(host, []):  # Empty allowed_hosts means we only check blocklist
-                raise SSRFValidationError(
-                    f"Private IP address {host} is not allowed",
-                    "PRIVATE_IP_BLOCKED"
-                )
-        return
-
+    # Even if host is in allowed list, resolve and check every time to prevent
+    # DNS rebinding attacks (e.g. attacker registers domain pointing to internal IP)
     resolve_and_check_ip(host, allowed_hosts)
 
 
@@ -181,11 +181,11 @@ def sanitize_header_key(key: str) -> bool:
     Returns True if the header key does not contain dangerous patterns.
     """
     dangerous_patterns = [
-        r"\r\n",
-        r"\n",
-        r"<script",
-        r"javascript:",
-        r"data:",
+        "\r\n",
+        "\n",
+        "<script",
+        "javascript:",
+        "data:",
     ]
     key_lower = key.lower()
     for pattern in dangerous_patterns:
@@ -201,8 +201,8 @@ def sanitize_header_value(value: str) -> bool:
     Returns True if the header value does not contain dangerous patterns.
     """
     dangerous_patterns = [
-        r"\r\n",
-        r"\n",
+        "\r\n",
+        "\n",
     ]
     for pattern in dangerous_patterns:
         if pattern in value:

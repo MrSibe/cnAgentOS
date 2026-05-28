@@ -142,8 +142,11 @@ async def list_rules(
     request: Request,
     session: DbSession,
     context: WatchSourceManager,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
 ):
-    return success_response(request, await service_for(request, session, context).list_rules(source_id))
+    data, total = await service_for(request, session, context).list_rules(source_id, page, page_size)
+    return success_response(request, data, total=total, page=page, page_size=page_size)
 
 
 @router.post("/watch-sources/{source_id}/rules", dependencies=[Depends(require_csrf)])
