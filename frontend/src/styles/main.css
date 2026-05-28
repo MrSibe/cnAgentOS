@@ -67,6 +67,13 @@ button, input, textarea, select { font: inherit; }
 .check-stack { display: grid; gap: 6px; max-height: 260px; overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
 .check-stack small { color: var(--muted); margin-left: 6px; }
 .dialog-hint, .security-note { color: var(--muted); font-size: 13px; }
+.detail-list { display: grid; gap: 10px; }
+.detail-list p { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; margin: 0; align-items: start; }
+.detail-list strong { color: var(--muted); font-size: 13px; }
+.detail-list span { min-width: 0; overflow-wrap: anywhere; }
+.content-preview { color: var(--muted); line-height: 1.7; }
+.content-box { max-height: 420px; overflow: auto; white-space: pre-wrap; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, .04); line-height: 1.7; }
+.drawer-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
 .login-screen { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 46px; align-items: center; padding: 8vw; }
 .login-story h1 { font-size: clamp(40px, 7vw, 84px); line-height: .94; margin: 0; letter-spacing: -.08em; }
 .login-story p { max-width: 520px; color: var(--muted); font-size: 18px; }

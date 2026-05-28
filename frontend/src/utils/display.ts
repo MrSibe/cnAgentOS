@@ -11,8 +11,9 @@ export function shortTime(value?: string | null): string {
 }
 
 export function statusType(status?: string | null): 'primary' | 'success' | 'info' | 'warning' | 'danger' {
-  if (status === 'active' || status === 'succeeded' || status === 'success') return 'success'
-  if (status === 'disabled') return 'info'
+  if (status === 'active' || status === 'available' || status === 'succeeded' || status === 'success') return 'success'
+  if (status === 'disabled' || status === 'archived' || status === 'cancelled' || status === 'pending') return 'info'
+  if (status === 'excluded' || status === 'partial_failed') return 'warning'
   if (status === 'failed' || status === 'error') return 'danger'
   return 'primary'
 }

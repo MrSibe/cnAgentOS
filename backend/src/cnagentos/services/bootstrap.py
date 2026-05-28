@@ -39,6 +39,35 @@ SYSTEM_FUNCTIONS = [
         "functions.manage",
     ),
     ("admin_audit", "审计日志", "admin", "/admin/audit-logs", "history", 40, "audit.view"),
+    ("watch", "智能瞭望", None, None, "file-search", 20, None),
+    (
+        "watch_sources",
+        "数据源与规则",
+        "watch",
+        "/admin/watch-sources",
+        "file-search",
+        10,
+        "watch.sources.manage",
+    ),
+    (
+        "watch_tasks",
+        "采集任务",
+        "watch",
+        "/admin/collection-tasks",
+        "activity",
+        20,
+        "watch.tasks.view",
+    ),
+    ("data", "数据仓库", None, None, "activity", 30, None),
+    (
+        "data_items",
+        "内容治理",
+        "data",
+        "/admin/knowledge-items",
+        "file-search",
+        10,
+        "data.items.view",
+    ),
 ]
 
 

@@ -14,6 +14,7 @@
 - 2026-05-27：Phase 1 C 用户、角色和功能导航页面应通过现有管理 API 完成编辑、启停、删除、密码重置和角色/权限选择；模型配置页面等待 Phase 1 B 后端接口后再继续联调。
 - 2026-05-27：认证请求可以聚合页面初始化读取，但 RBAC 权限不得固化到登录会话；角色停用或权限移除必须在后续受保护请求立即生效。
 - 2026-05-28：仓库采用单仓前后端分离开发边界：`backend/` 承载 FastAPI/uv/Alembic/pytest，`frontend/` 承载 Vite Vue TypeScript/pnpm/Element Plus，`docs/` 仍在根目录作为共享契约；后端只提供 API，不托管前端页面或 `frontend/dist`。
+- 2026-05-28：Phase 2 C 数据源、采集任务和数据仓库治理页面按 `docs/api/watch-and-data.md` 调用正式 API，不在前端内置 mock 数据；后端 Phase 2 B 接口完成前只能做静态与编译验证。
 
 ## 追加模板
 

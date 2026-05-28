@@ -96,3 +96,78 @@ export interface ModelCallItem {
   latency_ms?: number | null
   started_at?: string
 }
+
+export interface WatchSourceItem {
+  id: string
+  name: string
+  source_type: string
+  entry_url: string
+  allowed_hosts: string[]
+  status: string
+  auth_configured?: boolean
+  auth_mask?: string | null
+  description?: string | null
+  updated_at?: string
+}
+
+export interface WatchRuleItem {
+  id: string
+  source_id: string
+  name: string
+  request_method: string
+  request_headers?: Record<string, unknown> | null
+  request_params?: Record<string, unknown> | null
+  extractor_type: string
+  extractor_config: Record<string, unknown>
+  status: string
+  updated_at?: string
+}
+
+export interface CollectionTaskItem {
+  id: string
+  status: string
+  trigger_type?: string
+  source_count: number
+  item_success_count: number
+  item_failure_count: number
+  failure_summary?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+  created_at: string
+}
+
+export interface CollectionTaskSourceItem {
+  source_id: string
+  rule_id: string
+  source_name?: string | null
+  rule_name?: string | null
+  status: string
+  failure_summary?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+}
+
+export interface CollectionTaskDetail extends CollectionTaskItem {
+  sources?: CollectionTaskSourceItem[]
+}
+
+export interface KnowledgeItem {
+  id: string
+  source_id: string
+  task_id?: string | null
+  title?: string | null
+  summary?: string | null
+  canonical_url?: string | null
+  status: string
+  collected_at: string
+  published_at?: string | null
+  source?: { id: string; name: string } | null
+}
+
+export interface KnowledgeItemDetail extends KnowledgeItem {
+  content: string
+  external_key?: string | null
+  content_hash?: string | null
+  reviewed_by?: SessionUser | null
+  reviewed_at?: string | null
+}
