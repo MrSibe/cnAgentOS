@@ -128,3 +128,23 @@ async def create_system_admin(
     session.add(UserRole(user_id=user.id, role_id=system_role.id))
     await session.commit()
     return user, True
+
+
+SYSTEM_TASK_USER_ID = "system-task"
+
+
+async def ensure_system_task_user(session: AsyncSession) -> User:
+    """Ensure the system-task user exists for background job audit attribution."""
+    user = await session.get(User, SYSTEM_TASK_USER_ID)
+    if user is None:
+        user = User(
+            id=SYSTEM_TASK_USER_ID,
+            username=SYSTEM_TASK_USER_ID,
+            display_name="System Task",
+            password_hash="",  # No password, cannot login
+            status="active",
+            is_system_admin=False,
+        )
+        session.add(user)
+        await session.flush()
+    return user

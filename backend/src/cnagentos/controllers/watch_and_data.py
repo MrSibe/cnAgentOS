@@ -286,13 +286,10 @@ async def run_task(
 async def _execute_task_background(task_id: str, sessionmaker) -> None:
     """Background task that creates its own session."""
     from cnagentos.services.watch_and_data import WatchService
-    from cnagentos.models.entities import User
-    from sqlalchemy import select
+    from cnagentos.services.bootstrap import ensure_system_task_user
     async with sessionmaker() as session:
         try:
-            actor = await session.get(User, "system-task")
-            if actor is None:
-                actor = await session.scalar(select(User).limit(1))
+            actor = await ensure_system_task_user(session)
             service = WatchService(session, actor, None)
             await service.execute_task(task_id)
         except Exception:
