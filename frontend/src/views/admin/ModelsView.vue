@@ -13,6 +13,8 @@ const submitting = ref(false)
 const items = ref<ModelItem[]>([])
 const errorText = ref('')
 const output = ref('')
+const testing = ref(false)
+const testDone = ref(false)
 const createVisible = ref(false)
 const editVisible = ref(false)
 const testVisible = ref(false)
@@ -130,38 +132,60 @@ async function setDefault(model: ModelItem): Promise<void> {
 function openTest(model: ModelItem): void {
   testingModel.value = model
   output.value = ''
+  testing.value = false
+  testDone.value = false
   testVisible.value = true
 }
 
 async function normalTest(): Promise<void> {
   if (!testingModel.value) return
-  output.value = ''
+  output.value = '测试中，请稍候...'
+  testing.value = true
+  testDone.value = false
   try {
     const data = await post<{ reply: string; call_log_id: string; latency_ms: number; usage?: { total_tokens?: number } }>(
       `/api/v1/admin/models/${encodeURIComponent(testingModel.value.id)}/connection-tests`,
       { message: '请回复连接正常', stream: false },
     )
-    output.value = `${data.reply}\n\n调用记录：${data.call_log_id}\n耗时：${data.latency_ms}ms\nToken：${data.usage?.total_tokens ?? '-'}`
+    output.value = `回复：${data.reply}\n\n调用记录：${data.call_log_id}\n耗时：${data.latency_ms}ms\nToken：${data.usage?.total_tokens ?? '-'}`
+    testDone.value = true
   } catch (error) {
     output.value = errorMessage(error)
+  } finally {
+    testing.value = false
   }
 }
 
 async function streamTest(): Promise<void> {
   if (!testingModel.value) return
-  output.value = ''
+  output.value = '等待流式响应...\n'
+  testing.value = true
+  testDone.value = false
   try {
     await postStream(
       `/api/v1/admin/models/${encodeURIComponent(testingModel.value.id)}/connection-tests/stream`,
       { message: '请回复连接正常' },
       ({ event, data }) => {
-        if (event === 'delta') output.value += String(data.content ?? '')
-        if (event === 'completed') output.value += `\n\n完成：${String(data.call_log_id ?? 'ok')}`
-        if (event === 'error') output.value += `\n\n${String(data.message ?? '生成失败')}`
+        if (event === 'delta') {
+          if (output.value === '等待流式响应...\n') output.value = ''
+          output.value += String(data.content ?? '')
+        }
+        if (event === 'completed') {
+          output.value += `\n\n━━━━━━ 流式测试完成 ━━━━━━\n调用记录：${String(data.call_log_id ?? 'ok')}`
+          testDone.value = true
+          testing.value = false
+        }
+        if (event === 'error') {
+          output.value += `\n\n错误：${String(data.message ?? '生成失败')}`
+          testDone.value = true
+          testing.value = false
+        }
       },
     )
   } catch (error) {
     output.value = errorMessage(error)
+  } finally {
+    testing.value = false
   }
 }
 
@@ -207,9 +231,11 @@ onMounted(load)
   <el-dialog v-model="testVisible" :title="`模型测试 — ${testingModel?.name ?? ''}`" width="640px">
     <p class="test-model-info">模型：{{ testingModel?.model_name }}　地址：{{ testingModel?.base_url }}</p>
     <div class="test-toolbar">
-      <el-button @click="normalTest">普通测试</el-button>
-      <el-button type="primary" @click="streamTest">开始 SSE</el-button>
+      <el-button :loading="testing" :disabled="testing" @click="normalTest">普通测试</el-button>
+      <el-button type="primary" :loading="testing" :disabled="testing" @click="streamTest">流式测试</el-button>
     </div>
+    <el-alert v-if="testing" title="测试执行中，请等待完成" type="info" show-icon :closable="false" class="test-status" />
+    <el-alert v-if="testDone" title="测试已完成" type="success" show-icon :closable="false" class="test-status" />
     <pre class="stream-box">{{ output }}</pre>
   </el-dialog>
   <el-dialog v-model="editVisible" title="编辑模型" width="560px">
