@@ -14,6 +14,7 @@ const loading = ref(false)
 const submitting = ref(false)
 const functions = ref<FunctionItem[]>([])
 const permissions = ref<PermissionItem[]>([])
+const createVisible = ref(false)
 const editVisible = ref(false)
 const selected = ref<FunctionItem | null>(null)
 const emptyForm = () => ({ code: '', name: '', parent_id: null as string | null, route_path: '', icon: 'circle', required_permission_code: null as string | null, sort_order: 100 })
@@ -47,6 +48,7 @@ async function createFunction(): Promise<void> {
   try {
     await post<FunctionItem>('/api/v1/admin/functions', payload(createForm))
     Object.assign(createForm, emptyForm())
+    createVisible.value = false
     ElMessage.success('功能入口已创建，启用前请确认页面与权限均可用')
     await refreshAfterChange()
   } catch (error) {
@@ -112,36 +114,34 @@ onMounted(load)
 
 <template>
   <admin-page-header title="功能导航" description="菜单负责入口展示，接口权限仍由服务端在每次请求时校验。">
+    <el-button type="primary" @click="createVisible = true">新增功能</el-button>
     <el-button @click="load">刷新</el-button>
   </admin-page-header>
-  <div class="resource-grid">
-    <el-card class="resource-card" shadow="never">
-      <el-table v-loading="loading" :data="functions">
-        <el-table-column prop="code" label="功能代码" min-width="150" />
-        <el-table-column prop="name" label="名称" min-width="130" />
-        <el-table-column prop="route_path" label="页面路径" min-width="175" />
-        <el-table-column prop="required_permission_code" label="所需权限" min-width="180" />
-        <el-table-column label="状态" width="105"><template #default="{ row }"><status-tag :value="row.status" /></template></el-table-column>
-        <el-table-column prop="sort_order" label="排序" width="72" />
-        <el-table-column label="操作" fixed="right" width="190">
-          <template #default="{ row }"><el-button link type="primary" @click="openEdit(row)">编辑</el-button><el-button link @click="toggleStatus(row)">启停</el-button><el-button link type="danger" @click="deleteFunction(row)">删除</el-button></template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-    <el-card class="editor-card" shadow="never">
-      <template #header><strong>新增功能</strong></template>
-      <el-form label-position="top" :model="createForm">
-        <el-form-item label="功能代码"><el-input v-model="createForm.code" /></el-form-item>
-        <el-form-item label="名称"><el-input v-model="createForm.name" /></el-form-item>
-        <el-form-item label="父级功能"><el-select v-model="createForm.parent_id" clearable><el-option v-for="item in functions" :key="item.id" :value="item.id" :label="`${item.name} (${item.code})`" /></el-select></el-form-item>
-        <el-form-item label="页面路径"><el-input v-model="createForm.route_path" placeholder="/admin/example" /></el-form-item>
-        <el-form-item label="图标标识"><el-input v-model="createForm.icon" /></el-form-item>
-        <el-form-item label="所需权限"><el-select v-model="createForm.required_permission_code" clearable><el-option v-for="item in permissions" :key="item.id" :value="item.code" :label="`${item.name} (${item.code})`" /></el-select></el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="createForm.sort_order" :min="0" /></el-form-item>
-        <el-button type="primary" :loading="submitting" @click="createFunction">创建功能</el-button>
-      </el-form>
-    </el-card>
-  </div>
+  <el-card class="resource-card" shadow="never">
+    <el-table v-loading="loading" :data="functions">
+      <el-table-column prop="code" label="功能代码" min-width="150" />
+      <el-table-column prop="name" label="名称" min-width="130" />
+      <el-table-column prop="route_path" label="页面路径" min-width="175" />
+      <el-table-column prop="required_permission_code" label="所需权限" min-width="180" />
+      <el-table-column label="状态" width="105"><template #default="{ row }"><status-tag :value="row.status" /></template></el-table-column>
+      <el-table-column prop="sort_order" label="排序" width="72" />
+      <el-table-column label="操作" fixed="right" width="190">
+        <template #default="{ row }"><el-button link type="primary" @click="openEdit(row)">编辑</el-button><el-button link @click="toggleStatus(row)">启停</el-button><el-button link type="danger" @click="deleteFunction(row)">删除</el-button></template>
+      </el-table-column>
+    </el-table>
+  </el-card>
+  <el-dialog v-model="createVisible" title="新增功能" width="560px" @close="Object.assign(createForm, emptyForm())">
+    <el-form label-position="top" :model="createForm">
+      <el-form-item label="功能代码"><el-input v-model="createForm.code" /></el-form-item>
+      <el-form-item label="名称"><el-input v-model="createForm.name" /></el-form-item>
+      <el-form-item label="父级功能"><el-select v-model="createForm.parent_id" clearable><el-option v-for="item in functions" :key="item.id" :value="item.id" :label="`${item.name} (${item.code})`" /></el-select></el-form-item>
+      <el-form-item label="页面路径"><el-input v-model="createForm.route_path" placeholder="/admin/example" /></el-form-item>
+      <el-form-item label="图标标识"><el-input v-model="createForm.icon" /></el-form-item>
+      <el-form-item label="所需权限"><el-select v-model="createForm.required_permission_code" clearable><el-option v-for="item in permissions" :key="item.id" :value="item.code" :label="`${item.name} (${item.code})`" /></el-select></el-form-item>
+      <el-form-item label="排序"><el-input-number v-model="createForm.sort_order" :min="0" /></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="createVisible = false">取消</el-button><el-button type="primary" :loading="submitting" @click="createFunction">创建功能</el-button></template>
+  </el-dialog>
   <el-dialog v-model="editVisible" title="编辑功能" width="560px">
     <el-form label-position="top" :model="editForm">
       <el-form-item label="功能代码"><el-input :model-value="selected?.code" disabled /></el-form-item>
