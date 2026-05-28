@@ -23,7 +23,7 @@ cnAgentOS 是一个面向信息采集、数据沉淀和智能问答的 Web 应�
 
 - 后端语言：Python，使用 FastAPI 与 SQLAlchemy 异步数据层。
 - 前端语言：Vue 3 + TypeScript，使用 Vite、Pinia、Vue Router 与 Element Plus。
-- 架构形态：模块化 MVC 单体应用。
+- 架构形态：单仓前后端分离开发的模块化 MVC 单体应用。
 - 数据库：PostgreSQL，迁移由 Alembic 管理。
 - 设计原则：先完成可靠的业务闭环，再根据真实规模评估服务拆分。
 - 开发契约：新的数据库与 API 设计以 `docs/` 内文档为准，不继承原型代码中的技术细节。
@@ -60,7 +60,7 @@ uv run pytest
 
 ## 前端开发
 
-前端位于 `frontend/`，使用 `pnpm` 管理依赖和锁文件。开发时由 Vite 代理同源 API，生产构建产物由后端托管：
+前端位于 `frontend/`，使用 `pnpm` 管理依赖和锁文件。后端进程只提供 API，不托管前端页面或构建产物；开发时由 Vite 代理 API 到后端：
 
 ```bash
 pnpm --dir frontend install
@@ -68,19 +68,21 @@ pnpm --dir frontend dev
 pnpm --dir frontend build
 ```
 
-后端 API 本地默认运行在 `http://127.0.0.1:8000`，前端开发服务运行在 `http://127.0.0.1:5173`。
+后端 API 本地默认运行在 `http://127.0.0.1:8080`，前端开发服务运行在 `http://127.0.0.1:5173`。前端请求使用 `/api/...` 相对路径，由 Vite 代理到后端。
 
 ## Phase 1 管理端界面
 
-管理端前端由 `frontend/` 构建，后端 FastAPI 在生产或集成预览时托管 `frontend/dist` 并调用同源 `/api/v1` 接口：
+管理端前端由 `frontend/` 运行，调用 `/api/v1` 接口。开发时分别启动后端 API 与前端 Vite 服务：
 
 ```bash
-pnpm --dir frontend build
 cd backend
-uv run python main.py --port 8000
+uv run python main.py
+
+cd ..
+pnpm --dir frontend dev
 ```
 
-启动后访问 `http://127.0.0.1:8000`。登录页、后台框架、用户/角色/权限/导航页面和审计页面对接 Phase 1 A 已实现接口；模型配置和测试页面保留入口，等待 Phase 1 B 模型引擎接口接入。
+启动后访问 `http://127.0.0.1:5173`。登录页、后台框架、用户/角色/权限/导航页面和审计页面对接 Phase 1 A 已实现接口；模型配置和测试页面保留入口，等待 Phase 1 B 模型引擎接口接入。
 
 ## 文档导航
 

@@ -74,13 +74,13 @@
 
 **影响**：普通用户仅由管理员创建，首版不提供公开注册；生产部署必须配置专用 CSRF secret 并启用安全 Cookie。
 
-## 2026-05-28：采用单仓双应用目录结构
+## 2026-05-28：采用单仓前后端分离开发边界
 
-**决定**：仓库保持一个 Git 工作区，后端工程移动到 `backend/`，前端工程位于 `frontend/`，共享产品、API、数据库、计划和上下文文档继续保留在根目录 `docs/`。
+**决定**：仓库保持一个 Git 工作区，后端工程移动到 `backend/`，前端工程位于 `frontend/`，共享产品、API、数据库、计划和上下文文档继续保留在根目录 `docs/`。MVP 阶段采用前后端分离开发，但不拆成两个仓库。
 
 **原因**：首版仍需要后端 API、服务端会话、CSRF、SSE 和页面联调保持同一评审边界；单仓可降低接口同步和验收成本，同时让前后端源代码边界清晰。
 
-**影响**：Python 命令在 `backend/` 下执行，前端命令通过 `pnpm --dir frontend ...` 执行；根目录 `compose.yaml` 继续提供本地 PostgreSQL。
+**影响**：Python 命令在 `backend/` 下执行，前端命令通过 `pnpm --dir frontend ...` 执行；根目录 `compose.yaml` 继续提供本地 PostgreSQL。后端进程只提供 API、健康检查和 OpenAPI 文档，不托管前端页面或 `frontend/dist` 静态资源；开发期由 Vite 代理 `/api` 到 FastAPI。只有出现强隔离合规、独立团队边界或跨仓发布管理需要时，才重新评估双仓。
 
 ## 2026-05-28：前端采用 Vite Vue 脚手架与 Element Plus
 
@@ -88,4 +88,4 @@
 
 **原因**：MVP 管理端以表格、表单、弹窗、权限选择和流式状态展示为主，Element Plus 能覆盖通用后台交互；智能问数和引用展示保留自定义业务组件空间。
 
-**影响**：开发时 Vite 代理 `/api` 到 FastAPI；集成/生产预览时 FastAPI 托管 `frontend/dist`，仍保持同源 Cookie、CSRF 和 SSE 契约。
+**影响**：开发时 Vite 代理 `/api` 到 FastAPI；后端不托管前端构建产物。

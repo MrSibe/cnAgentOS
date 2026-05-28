@@ -32,6 +32,17 @@ async def test_login_me_and_csrf_enforcement(client, admin_session):
     assert missing.json()["error"]["code"] == "NOT_FOUND"
 
 
+async def test_backend_does_not_serve_frontend_routes(client):
+    root = await client.get("/")
+    admin = await client.get("/admin")
+    asset = await client.get("/assets/index.js")
+
+    assert root.status_code == 404
+    assert admin.status_code == 404
+    assert asset.status_code == 404
+    assert root.json()["error"]["code"] == "NOT_FOUND"
+
+
 async def test_user_creation_password_reset_and_session_revocation(client, admin_session, app):
     created = await client.post(
         "/api/v1/admin/users",

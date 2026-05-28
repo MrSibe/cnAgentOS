@@ -11,4 +11,4 @@ pnpm lint
 pnpm build
 ```
 
-During development, Vite proxies `/api` and `/health` to `http://127.0.0.1:8000`. For integrated preview, build this project and run the backend from `../backend`.
+During development, Vite proxies `/api` and `/health` to `http://127.0.0.1:8080`.
