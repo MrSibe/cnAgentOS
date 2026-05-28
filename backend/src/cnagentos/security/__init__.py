@@ -9,6 +9,14 @@ from pwdlib import PasswordHash
 from cnagentos.api import ApiError
 
 from .cipher import decrypt, encrypt, generate_mask, init_cipher, InvalidToken
+from cnagentos.services.collection_security import (
+    sanitize_collection_error,
+    sanitized_url,
+    validate_fetch_target,
+    validate_rule_security,
+    validate_source_policy,
+)
+from cnagentos.services.watch_audit import write_watch_audit
 
 __all__ = [
     "decrypt",
@@ -17,6 +25,12 @@ __all__ = [
     "init_cipher",
     "InvalidToken",
     "tokens_match",
+    "sanitize_collection_error",
+    "sanitized_url",
+    "validate_fetch_target",
+    "validate_rule_security",
+    "validate_source_policy",
+    "write_watch_audit",
 ]
 
 
