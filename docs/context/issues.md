@@ -4,7 +4,6 @@
 
 | 事项 | 当前判断 | 处理时机 |
 | --- | --- | --- |
-| 前端实现方式 | 需要管理端与用户问数界面；可重写原型 | UI 实施计划中决定 |
 | 内容检索方式 | 首版必须从可用数据取得依据；具体全文/向量策略待定 | 问数实施前决定 |
 | Git 仓库与主分支保护 | Git 仓库和 `main` 已存在；远端主分支保护与评审门禁是否落地待确认 | 首批功能合并前验证分支保护与评审流程 |
 | 登录接口防暴力保护 | 已统一认证失败响应，但尚未实现失败频率限制、失败审计或等效的口令猜测防护 | 生产部署与安全验收前确定策略并实现 |
@@ -16,6 +15,7 @@
 | Web 框架、ORM 与迁移 | FastAPI + SQLAlchemy AsyncSession + Alembic | `docs/context/decisions.md` |
 | 首版关系型数据库 | PostgreSQL，开发环境由 Docker Compose 提供 | `docs/context/decisions.md` |
 | 普通用户账户开通方式 | 由管理员创建，MVP 不开放自助注册 | `docs/context/decisions.md` |
+| 前端实现方式 | Vue 3 + TypeScript + Vite + Pinia + Vue Router + Element Plus，`pnpm` 管理 | `docs/context/decisions.md` |
 
 ## 高风险要求
 

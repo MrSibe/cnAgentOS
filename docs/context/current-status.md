@@ -1,14 +1,14 @@
 # 当前状态
 
-**更新时间**：2026-05-27
+**更新时间**：2026-05-28
 
 ## 当前阶段
 
-正式产品处于 **Phase 1 A（平台与安全）已实现、Phase 1 C 管理端页面后续交互补齐中，Phase 1 B 待完成** 阶段。
+正式产品处于 **Phase 1 A（平台与安全）与 Phase 1 B（模型引擎）后端已实现、Phase 1 C 管理端迁移到 Vue 脚手架联调中** 阶段。
 
-Phase 0 工程底座已落地：FastAPI + SQLAlchemy AsyncSession + Alembic + PostgreSQL 骨架可运行，`uv` 依赖管理一致，Docker Compose 提供开发数据库。
+Phase 0 工程底座已落地并调整为单仓双应用结构：`backend/` 承载 FastAPI + SQLAlchemy AsyncSession + Alembic + PostgreSQL 后端，`frontend/` 承载 Vite Vue TypeScript + Pinia + Vue Router + Element Plus 前端；Docker Compose 继续在根目录提供开发数据库。
 
-Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审计全部后端实现和集成测试。Phase 1 C 已将登录页、后台框架和管理端页面接入 FastAPI 同源 View，前端默认调用正式 `/api/v1` 接口，并补齐用户、角色与功能导航管理的编辑、启停、删除和授权选择交互。
+Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审计全部后端实现和集成测试。Phase 1 B 后端已实现模型配置、凭据加密脱敏、连接测试、流式测试和调用统计。Phase 1 C 管理端已迁移到 Vite 脚手架前端，继续调用正式 `/api/v1` 接口，并保留用户、角色、功能导航、权限、审计、模型配置入口和 SSE 测试客户端页面。
 
 早期示例原型仅被用于提取需求，已经从正式开发上下文中废弃；它不作为功能完成状态，也不要求新实现保持兼容。后续开发应按 `docs/product/`、`docs/architecture/`、`docs/database/` 和 `docs/api/` 中的新契约建设。
 
@@ -23,6 +23,7 @@ Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审�
 | 首版 API 契约 | 已定义 |
 | AI 开发流程与可复用 SOP | 已定义 |
 | `uv` 依赖与项目环境工作流 | 已定义 |
+| `pnpm` 前端依赖、Vite 脚手架与组件库选择 | 已定义 |
 | Git 分支、约定式提交与 Code Review 流程 | 已定义 |
 | 三人并行开发 Phase 计划 | 已定义 |
 
@@ -30,7 +31,7 @@ Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审�
 
 | 模块 | 目标 | 正式实现状态 |
 | --- | --- | --- |
-| 认证与基础 RBAC | 登录、用户、角色、权限、功能导航和访问控制 | `feat/phase-1-auth-rbac` 已实现，集成测试通过（13 条）；C 工作流页面已对接登录、导航、用户、角色、权限、功能导航和审计接口 |
+| 认证与基础 RBAC | 登录、用户、角色、权限、功能导航和访问控制 | `feat/phase-1-auth-rbac` 已实现；C 工作流已迁移到 Vue 管理端并对接登录、导航、用户、角色、权限、功能导航和审计接口，支持现有管理 API 的主要写操作 |
 | 模型引擎 | 脱敏配置、默认模型、测试与调用统计 | `feat/phase-1-model-engine` 后端已实现，包含模型配置 CRUD、凭据加密脱敏、连接测试、流式测试、调用统计；集成测试待环境验证 |
 | 智能瞭望 | 数据源、规则和采集任务 | 待开发 |
 | 数据仓库 | 标准化入库、去重和内容治理 | 待开发 |
@@ -39,9 +40,9 @@ Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审�
 
 ## 下一里程碑
 
-Phase 1 A（平台与安全）后端已实现，Phase 1 B 后端已实现，Phase 1 C 管理端页面已部分接入。待完成：
-- A/B：联调模型引擎 API 与管理端页面，补齐模型启停/设默认等完整管理交互。
-- C：与 A/B 真实接口继续联调，完成模型配置与测试页面的完整对接。
+Phase 1 A（平台与安全）后端已实现，Phase 1 B 后端已实现，Phase 1 C 管理端已进入 Vue 脚手架迁移后的联调阶段。待完成：
+- A：补充审计查看功能评估与权限矩阵最终确认。
+- A/B/C：联调模型引擎 API 与管理端页面，补齐模型启停、设默认、连接测试、流式测试和调用记录等完整管理交互。
 - B：进入智能瞭望实现（数据源、规则、采集任务）。
 
 ## Phase 1 A 实现摘要

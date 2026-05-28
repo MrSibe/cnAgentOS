@@ -8,7 +8,7 @@ from cnagentos.config import Settings, get_settings
 from cnagentos.controllers.admin import router as admin_router
 from cnagentos.controllers.auth import router as auth_router
 from cnagentos.controllers.model_engine import router as model_engine_router
-from cnagentos.controllers.views import STATIC_ROOT, router as views_router
+from cnagentos.controllers.views import FRONTEND_ASSETS, router as views_router
 from cnagentos.db import build_engine, build_sessionmaker
 from cnagentos.security import init_cipher
 
@@ -31,7 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(admin_router)
     app.include_router(model_engine_router)
-    app.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")
+    app.mount("/assets", StaticFiles(directory=FRONTEND_ASSETS, check_dir=False), name="assets")
     app.include_router(views_router)
 
     @app.get("/health")

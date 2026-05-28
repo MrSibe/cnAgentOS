@@ -73,3 +73,19 @@
 **原因**：该方案支持服务端即时撤销会话和权限变更生效，避免在仓库、迁移或 API 中暴露初始密码与会话秘密，并允许后台页面刷新后安全继续操作。
 
 **影响**：普通用户仅由管理员创建，首版不提供公开注册；生产部署必须配置专用 CSRF secret 并启用安全 Cookie。
+
+## 2026-05-28：采用单仓双应用目录结构
+
+**决定**：仓库保持一个 Git 工作区，后端工程移动到 `backend/`，前端工程位于 `frontend/`，共享产品、API、数据库、计划和上下文文档继续保留在根目录 `docs/`。
+
+**原因**：首版仍需要后端 API、服务端会话、CSRF、SSE 和页面联调保持同一评审边界；单仓可降低接口同步和验收成本，同时让前后端源代码边界清晰。
+
+**影响**：Python 命令在 `backend/` 下执行，前端命令通过 `pnpm --dir frontend ...` 执行；根目录 `compose.yaml` 继续提供本地 PostgreSQL。
+
+## 2026-05-28：前端采用 Vite Vue 脚手架与 Element Plus
+
+**决定**：前端使用 Vite `vue-ts` 脚手架生成，技术栈为 Vue 3、TypeScript、Vue Router、Pinia、Element Plus、Vitest、ESLint 和 Prettier；依赖和锁文件由 `pnpm` 管理。
+
+**原因**：MVP 管理端以表格、表单、弹窗、权限选择和流式状态展示为主，Element Plus 能覆盖通用后台交互；智能问数和引用展示保留自定义业务组件空间。
+
+**影响**：开发时 Vite 代理 `/api` 到 FastAPI；集成/生产预览时 FastAPI 托管 `frontend/dist`，仍保持同源 Cookie、CSRF 和 SSE 契约。

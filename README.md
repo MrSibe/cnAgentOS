@@ -22,6 +22,7 @@ cnAgentOS 是一个面向信息采集、数据沉淀和智能问答的 Web 应�
 ## 目标架构
 
 - 后端语言：Python，使用 FastAPI 与 SQLAlchemy 异步数据层。
+- 前端语言：Vue 3 + TypeScript，使用 Vite、Pinia、Vue Router 与 Element Plus。
 - 架构形态：模块化 MVC 单体应用。
 - 数据库：PostgreSQL，迁移由 Alembic 管理。
 - 设计原则：先完成可靠的业务闭环，再根据真实规模评估服务拆分。
@@ -33,10 +34,13 @@ cnAgentOS 是一个面向信息采集、数据沉淀和智能问答的 Web 应�
 
 ```bash
 # 首次拉取或依赖变化后同步环境
+cd backend
 uv sync
 
 # 启动本地 PostgreSQL 并执行迁移
+cd ..
 docker compose up -d postgres
+cd backend
 uv run alembic upgrade head
 
 # 一次性创建首个系统管理员（密码通过交互输入或环境变量提供）
@@ -54,11 +58,25 @@ uv run pytest
 
 本地配置可从 `.env.example` 开始设置，示例值只用于本地开发，不用于部署。依赖新增或调整应使用 `uv add` / `uv remove`，并在同一次变更中提交更新后的 `pyproject.toml` 与 `uv.lock`。
 
-## Phase 1 管理端界面
+## 前端开发
 
-管理端页面由 FastAPI 应用直接提供，并调用同源 `/api/v1` 接口：
+前端位于 `frontend/`，使用 `pnpm` 管理依赖和锁文件。开发时由 Vite 代理同源 API，生产构建产物由后端托管：
 
 ```bash
+pnpm --dir frontend install
+pnpm --dir frontend dev
+pnpm --dir frontend build
+```
+
+后端 API 本地默认运行在 `http://127.0.0.1:8000`，前端开发服务运行在 `http://127.0.0.1:5173`。
+
+## Phase 1 管理端界面
+
+管理端前端由 `frontend/` 构建，后端 FastAPI 在生产或集成预览时托管 `frontend/dist` 并调用同源 `/api/v1` 接口：
+
+```bash
+pnpm --dir frontend build
+cd backend
 uv run python main.py --port 8000
 ```
 
@@ -85,7 +103,7 @@ uv run python main.py --port 8000
 
 ## 开发状态
 
-正式版本目前处于重写设计阶段。开始实现任何首版功能前，应先阅读需求、MVP 验收边界、开发计划、架构、数据库和对应 API 文档；实现完成后，应同步更新动态上下文文档。
+正式版本目前处于 Phase 1 管理底座迁移与模型能力实现前阶段。开始实现任何首版功能前，应先阅读需求、MVP 验收边界、开发计划、架构、数据库和对应 API 文档；实现完成后，应同步更新动态上下文文档。
 
 正式变更采用约定式提交，必须通过工作分支交付并由项目负责人 Code Review 后合并；不得直接向主分支提交变更。
 
