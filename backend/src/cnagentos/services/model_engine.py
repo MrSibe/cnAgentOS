@@ -286,17 +286,18 @@ class ModelEngineService:
             call_log.finished_at = utc_now()
             call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
             await self.session.commit()
-            raise ApiError(504, "UPSTREAM_ERROR", "模型服务响应超时")
+            raise ApiError(504, "TIMEOUT", "模型服务响应超时")
         except APIConnectionError as exc:
             call_log.status = "failed"
             call_log.error_code = "CONNECTION_ERROR"
             call_log.finished_at = utc_now()
             call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
             await self.session.commit()
-            raise ApiError(502, "UPSTREAM_ERROR", f"无法连接到模型服务: {type(exc).__name__}")
+            raise ApiError(502, "CONNECTION_ERROR", f"无法连接到模型服务: {type(exc).__name__}")
 
     def _stream_error_event(self, code: str, message: str) -> str:
-        return f"data: {json.dumps({'error': {'code': code, 'message': message}}, ensure_ascii=False)}\n\n"
+        payload = {"event": "error", "error": {"code": code, "message": message}}
+        return f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     async def _finalize_stream_call(
         self,
@@ -365,7 +366,7 @@ class ModelEngineService:
                 yield "data: [DONE]\n\n"
             except APIConnectionError:
                 await self._finalize_stream_call(call_log, start_time, "failed", "CONNECTION_ERROR")
-                yield self._stream_error_event("UPSTREAM_ERROR", "无法连接到模型服务")
+                yield self._stream_error_event("CONNECTION_ERROR", "无法连接到模型服务")
                 yield "data: [DONE]\n\n"
             except Exception:
                 await self._finalize_stream_call(call_log, start_time, "failed", "UPSTREAM_ERROR")

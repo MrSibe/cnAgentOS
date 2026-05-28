@@ -392,10 +392,15 @@ async def test_connection_test_uses_openai_provider(monkeypatch, client, admin_s
 
 
 @pytest.mark.parametrize(
-    ("error", "status_code", "log_code"),
+    ("error", "status_code", "api_code", "log_code"),
     [
-        (APITimeoutError(request=openai_request()), 504, "TIMEOUT"),
-        (APIConnectionError(request=openai_request()), 502, "CONNECTION_ERROR"),
+        (APITimeoutError(request=openai_request()), 504, "TIMEOUT", "TIMEOUT"),
+        (
+            APIConnectionError(request=openai_request()),
+            502,
+            "CONNECTION_ERROR",
+            "CONNECTION_ERROR",
+        ),
         (
             APIStatusError(
                 "upstream failed",
@@ -404,11 +409,12 @@ async def test_connection_test_uses_openai_provider(monkeypatch, client, admin_s
             ),
             502,
             "UPSTREAM_ERROR",
+            "UPSTREAM_ERROR",
         ),
     ],
 )
 async def test_connection_test_maps_openai_errors(
-    monkeypatch, client, admin_session, error, status_code, log_code
+    monkeypatch, client, admin_session, error, status_code, api_code, log_code
 ):
     reset_fake_provider()
     FakeProviderClient.error = error
@@ -422,6 +428,7 @@ async def test_connection_test_maps_openai_errors(
     )
 
     assert response.status_code == status_code
+    assert response.json()["error"]["code"] == api_code
     logs = await client.get("/api/v1/admin/model-calls", params={"model_id": model_id})
     log = logs.json()["data"][0]
     assert log["status"] == "failed"
@@ -475,9 +482,38 @@ async def test_stream_connection_test_marks_openai_error(
 
     text = body.decode()
     assert response.status_code == 200
+    assert "event: error" in text
+    assert '"event": "error"' in text
     assert '"code": "HTTP_503"' in text
     assert "data: [DONE]" in text
     logs = await client.get("/api/v1/admin/model-calls", params={"model_id": model_id})
     log = logs.json()["data"][0]
     assert log["status"] == "failed"
     assert log["error_code"] == "HTTP_503"
+
+
+async def test_stream_connection_test_marks_connection_error(
+    monkeypatch, client, admin_session
+):
+    reset_fake_provider()
+    FakeProviderClient.stream_error = APIConnectionError(request=openai_request())
+    monkeypatch.setattr("cnagentos.services.model_engine.ModelProviderClient", FakeProviderClient)
+    model_id = await create_active_model(client, admin_session, name="流式连接错误模型")
+
+    async with client.stream(
+        "POST",
+        f"/api/v1/admin/models/{model_id}/connection-tests/stream",
+        headers={"X-CSRF-Token": admin_session},
+        json={"message": "请回复连接正常"},
+    ) as response:
+        body = await response.aread()
+
+    text = body.decode()
+    assert response.status_code == 200
+    assert "event: error" in text
+    assert '"code": "CONNECTION_ERROR"' in text
+    assert "data: [DONE]" in text
+    logs = await client.get("/api/v1/admin/model-calls", params={"model_id": model_id})
+    log = logs.json()["data"][0]
+    assert log["status"] == "failed"
+    assert log["error_code"] == "CONNECTION_ERROR"

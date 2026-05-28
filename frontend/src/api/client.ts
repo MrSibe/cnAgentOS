@@ -102,7 +102,11 @@ export async function postStream(path: string, body: unknown, onEvent: (event: S
       try {
         const parsed = JSON.parse(dataLine) as Record<string, unknown>
         const eventLine = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
-        const eventType = eventLine ?? (typeof parsed.event === 'string' ? parsed.event : undefined) ?? 'delta'
+        const eventType =
+          eventLine ??
+          (typeof parsed.event === 'string' ? parsed.event : undefined) ??
+          (parsed.error && typeof parsed.error === 'object' ? 'error' : undefined) ??
+          'delta'
         onEvent({ event: eventType, data: parsed })
       } catch {
         // skip unparseable lines

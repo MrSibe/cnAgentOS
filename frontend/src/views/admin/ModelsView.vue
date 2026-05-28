@@ -178,7 +178,8 @@ async function streamTest(): Promise<void> {
           testing.value = false
         }
         if (event === 'error') {
-          output.value += `\n\n错误：${String(data.message ?? '生成失败')}`
+          const streamError = data.error as { message?: string } | undefined
+          output.value += `\n\n错误：${String(streamError?.message ?? data.message ?? '生成失败')}`
           testDone.value = true
           testing.value = false
         }
