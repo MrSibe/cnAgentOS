@@ -142,7 +142,16 @@ def validate_url(url: str, allowed_hosts: list[str]) -> None:
             "METADATA_HOST_BLOCKED"
         )
 
-    if host.lower() in [h.lower() for h in allowed_hosts]:
+    # Check if host is in allowed_hosts and is not a private IP
+    allowed_hosts_lower = [h.lower() for h in allowed_hosts]
+    if host.lower() in allowed_hosts_lower:
+        # Even if host is in allowed list, check if it's a private IP
+        if is_ip_address(host):
+            if not _is_ip_allowed(host, []):  # Empty allowed_hosts means we only check blocklist
+                raise SSRFValidationError(
+                    f"Private IP address {host} is not allowed",
+                    "PRIVATE_IP_BLOCKED"
+                )
         return
 
     resolve_and_check_ip(host, allowed_hosts)

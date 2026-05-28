@@ -1,0 +1,20 @@
+## Summary
+
+- Add database migration for `watch_sources`, `watch_rules`, `collection_tasks`, `collection_task_sources`, `knowledge_items`, `collection_task_items` tables
+- Implement `WatchService` with CRUD operations for sources, rules, tasks
+- Add SSRF protection with IP blacklist and host whitelist validation
+- Add content deduplication using SHA-256 content hash
+- Support HTML and JSON extraction with configurable CSS selectors
+- Add integration tests covering CRUD, SSRF validation, permissions
+
+## Test plan
+
+- [x] All 13 integration tests pass
+- [x] SSRF protection blocks private IPs even in allowed_hosts
+- [x] Data source activation requires at least one active rule
+- [x] Task creation validates active source and rule
+- [x] Permission enforcement tested
+
+## Related issues
+
+Closes #13

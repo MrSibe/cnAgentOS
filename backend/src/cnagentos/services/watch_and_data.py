@@ -49,6 +49,7 @@ from cnagentos.security import (
 )
 
 VALID_SOURCE_TYPES = {"web_api", "web_page"}
+VALID_SOURCE_STATUSES = {"active", "disabled"}
 VALID_RULE_STATUSES = {"active", "disabled"}
 VALID_TASK_STATUSES = {"pending", "running", "succeeded", "partial_failed", "failed", "cancelled"}
 VALID_ITEM_STATUSES = {"available", "excluded", "archived"}
@@ -215,7 +216,7 @@ class WatchService:
         return await self._serialize_source(source)
 
     async def update_source_status(self, source_id: str, status: str) -> dict:
-        if status not in VALID_SOURCE_TYPES:
+        if status not in VALID_SOURCE_STATUSES:
             raise ApiError(409, "INVALID_STATE", "无效的状态值")
 
         source = await self.session.get(WatchSource, source_id)
