@@ -168,7 +168,9 @@ async function streamTest(): Promise<void> {
       ({ event, data }) => {
         if (event === 'delta') {
           if (output.value === '等待流式响应...\n') output.value = ''
-          output.value += String(data.content ?? '')
+          const choices = data.choices as Array<{ delta: { content?: string } }> | undefined
+          const content = choices?.[0]?.delta?.content
+          if (content) output.value += content
         }
         if (event === 'completed') {
           output.value += `\n\n━━━━━━ 流式测试完成 ━━━━━━\n调用记录：${String(data.call_log_id ?? 'ok')}`

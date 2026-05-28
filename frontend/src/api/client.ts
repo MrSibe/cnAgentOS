@@ -94,12 +94,19 @@ export async function postStream(path: string, body: unknown, onEvent: (event: S
     buffer = events.pop() ?? ''
     for (const raw of events) {
       const lines = raw.split('\n')
-      const event = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
-      const data = lines
+      const dataLine = lines
         .filter((line) => line.startsWith('data:'))
         .map((line) => line.slice(5).trim())
         .join('\n')
-      if (event && data) onEvent({ event, data: JSON.parse(data) as Record<string, unknown> })
+      if (!dataLine || dataLine === '[DONE]') continue
+      try {
+        const parsed = JSON.parse(dataLine) as Record<string, unknown>
+        const eventLine = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
+        const eventType = eventLine ?? (typeof parsed.event === 'string' ? parsed.event : undefined) ?? 'delta'
+        onEvent({ event: eventType, data: parsed })
+      } catch {
+        // skip unparseable lines
+      }
     }
   }
 }
