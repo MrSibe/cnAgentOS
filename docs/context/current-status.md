@@ -4,11 +4,11 @@
 
 ## 当前阶段
 
-正式产品处于 **Phase 1 A（平台与安全）与 Phase 1 B（模型引擎）后端已实现、Phase 1 C 管理端迁移到 Vue 脚手架联调中** 阶段。
+正式产品处于 **Phase 2（瞭望采集与数据沉淀）后端已实现** 阶段。
 
 Phase 0 工程底座已落地并调整为单仓前后端分离结构：`backend/` 承载 FastAPI + SQLAlchemy AsyncSession + Alembic + PostgreSQL 后端 API，`frontend/` 承载 Vite Vue TypeScript + Pinia + Vue Router + Element Plus 前端；Docker Compose 继续在根目录提供开发数据库。后端进程只提供 API、健康检查和 OpenAPI 文档，不托管前端页面或构建产物。
 
-Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审计全部后端实现和集成测试。Phase 1 B 后端已实现模型配置、凭据加密脱敏、连接测试、流式测试和调用统计。Phase 1 C 管理端已迁移到 Vite 脚手架前端，继续调用正式 `/api/v1` 接口，并保留用户、角色、功能导航、权限、审计、模型配置入口和 SSE 测试客户端页面。
+Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审计全部后端实现和集成测试。Phase 1 B 后端已实现模型配置、凭据加密脱敏、连接测试、流式测试和调用统计。Phase 1 C 管理端已迁移到 Vite 脚手架前端，继续调用正式 `/api/v1` 接口，并保留用户、角色、功能导航、权限、审计、模型配置入口和 SSE 测试客户端页面。Phase 2 后端已实现数据源、采集规则、手动采集任务、知识库内容和 SSRF 防护。
 
 早期示例原型仅被用于提取需求，已经从正式开发上下文中废弃；它不作为功能完成状态，也不要求新实现保持兼容。后续开发应按 `docs/product/`、`docs/architecture/`、`docs/database/` 和 `docs/api/` 中的新契约建设。
 
@@ -33,17 +33,17 @@ Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审�
 | --- | --- | --- |
 | 认证与基础 RBAC | 登录、用户、角色、权限、功能导航和访问控制 | `feat/phase-1-auth-rbac` 已实现；C 工作流已迁移到 Vue 管理端并对接登录、导航、用户、角色、权限、功能导航和审计接口，支持现有管理 API 的主要写操作 |
 | 模型引擎 | 脱敏配置、默认模型、测试与调用统计 | `feat/phase-1-model-engine` 后端已实现，包含模型配置 CRUD、凭据加密脱敏、连接测试、流式测试、调用统计；集成测试待环境验证 |
-| 智能瞭望 | 数据源、规则和采集任务 | 待开发 |
-| 数据仓库 | 标准化入库、去重和内容治理 | 待开发 |
+| 智能瞭望 | 数据源、规则和采集任务 | `feat/phase-2-watch-data` 后端已实现，包含数据源 CRUD、规则 CRUD、手动任务创建与执行、任务状态追踪 |
+| 数据仓库 | 标准化入库、去重和内容治理 | `feat/phase-2-watch-data` 后端已实现，包含知识库内容列表/详情/状态管理、内容标准化入库、基于内容哈希去重 |
+| 安全与审计 | 秘密保护、SSRF 防护与高风险动作审计 | Phase 1 A 已覆盖认证/RBAC/CSRF/审计基础；Phase 1 B 已实现凭据加密；Phase 2 已实现 SSRF 校验、认证加密和安全审计 |
 | 智能问数 | 检索依据、流式回答与引用 | 待开发 |
-| 安全与审计 | 秘密保护、SSRF 防护与高风险动作审计 | Phase 1 A 已覆盖认证/RBAC/CSRF/审计基础；Phase 1 B 已实现凭据加密；采集安全待后续模块实现 |
 
 ## 下一里程碑
 
-Phase 1 A（平台与安全）后端已实现，Phase 1 B 后端已实现，Phase 1 C 管理端已进入 Vue 脚手架迁移后的联调阶段。待完成：
-- A：补充审计查看功能评估与权限矩阵最终确认。
-- A/B/C：联调模型引擎 API 与管理端页面，补齐模型启停、设默认、连接测试、流式测试和调用记录等完整管理交互。
-- B：进入智能瞭望实现（数据源、规则、采集任务）。
+Phase 1 A/B/C 已完成，Phase 2 后端已实现。待完成：
+- C：联调 Phase 2 API 与管理端页面，补齐数据源配置、规则管理、任务执行和知识库治理等完整管理交互。
+- B/C：进入 Phase 3 智能问数实现（会话、检索、SSE 回答、引用）。
+- A：Phase 3 安全检查与审计支持。
 
 ## Phase 1 A 实现摘要
 
@@ -84,6 +84,33 @@ Phase 1 A（平台与安全）后端已实现，Phase 1 B 后端已实现，Phas
 - 连接测试支持普通响应和 SSE 流式响应
 - 模型调用记录包含耗时、token 使用量和脱敏错误分类
 - 集成测试覆盖 9 条：CRUD、列表过滤、脱敏验证、默认模型保护、权限控制
+
+## Phase 2 实现摘要
+
+**分支**：`feat/phase-2-watch-data`
+
+**已实现接口**（符合 `docs/api/watch-and-data.md`）：
+
+| 模块 | 端点 | 状态 |
+| --- | --- | --- |
+| 数据源 | `GET/POST /api/v1/admin/watch-sources`、`GET/PATCH /watch-sources/{id}`、`PATCH /watch-sources/{id}/status` | 已实现 |
+| 采集规则 | `GET/POST /api/v1/admin/watch-sources/{id}/rules`、`PATCH /watch-rules/{id}` | 已实现 |
+| 采集任务 | `POST /api/v1/admin/collection-tasks`、`GET /collection-tasks`、`GET /collection-tasks/{id}`、`POST /collection-tasks/{id}/cancel` | 已实现 |
+| 知识库 | `GET /api/v1/admin/knowledge-items`、`GET /knowledge-items/{id}`、`PATCH /knowledge-items/{id}/status` | 已实现 |
+
+**技术细节**：
+- 数据源认证配置使用 Fernet 加密存储，只返回掩码提示
+- SSRF 防护：禁止内网 IP、链路本地地址、云元数据端点，支持 host 白名单解析验证
+- 采集规则支持 HTML 和 JSON 两种解析类型，使用 CSS 选择器配置
+- 任务执行记录成功/失败计数，支持部分失败状态
+- 知识库内容基于 SHA-256 内容哈希去重，支持 available/excluded/archived 三种治理状态
+- 审计动作覆盖数据源创建/修改/启停、规则变更、任务创建/取消、内容状态变更
+- 集成测试覆盖 13 条：CRUD、SSRF 防护、分页过滤、任务创建/取消、权限控制
+
+**待完成**：
+- 任务异步执行（当前任务创建后需手动触发执行）
+- 内容摘要自动生成
+- 前端管理界面集成
 
 ## 维护要求
 

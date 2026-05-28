@@ -127,3 +127,72 @@ class ModelCallFilters(PageParams):
     status: str | None = None
     started_from: datetime | None = None
     started_to: datetime | None = None
+
+
+# --- Watch Sources ---
+class WatchSourceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    source_type: str = Field(default="web_page", max_length=20)
+    entry_url: str = Field(min_length=1, max_length=2048)
+    allowed_hosts: list[str] = Field(min_length=1)
+    auth_config: dict | None = None
+    description: str | None = None
+
+
+class WatchSourceUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    entry_url: str | None = Field(default=None, min_length=1, max_length=2048)
+    allowed_hosts: list[str] | None = None
+    auth_config: dict | None = None
+    description: str | None = None
+
+    @model_validator(mode="after")
+    def ensure_change(self):
+        if self.name is None and self.entry_url is None and self.allowed_hosts is None and self.auth_config is None and self.description is None:
+            raise ValueError("至少提交一个可修改字段")
+        return self
+
+
+# --- Watch Rules ---
+class WatchRuleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    request_method: str = Field(default="GET", max_length=10)
+    request_headers: dict | None = None
+    request_params: dict | None = None
+    extractor_type: str = Field(default="html", max_length=20)
+    extractor_config: dict = Field(min_length=1)
+
+
+class WatchRuleUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    request_method: str | None = Field(default=None, max_length=10)
+    request_headers: dict | None = None
+    request_params: dict | None = None
+    extractor_type: str | None = Field(default=None, max_length=20)
+    extractor_config: dict | None = None
+    status: str | None = None
+
+    @model_validator(mode="after")
+    def ensure_change(self):
+        if self.name is None and self.request_method is None and self.request_headers is None and self.request_params is None and self.extractor_type is None and self.extractor_config is None and self.status is None:
+            raise ValueError("至少提交一个可修改字段")
+        return self
+
+
+# --- Collection Tasks ---
+class CollectionTaskTarget(BaseModel):
+    source_id: str
+    rule_id: str
+    variables: dict | None = None
+
+
+class CollectionTaskCreate(BaseModel):
+    targets: list[CollectionTaskTarget] = Field(min_length=1)
+
+
+# --- Knowledge Items ---
+class KnowledgeItemFilters(PageParams):
+    source_id: str | None = None
+    status: str | None = None
+    collected_from: datetime | None = None
+    collected_to: datetime | None = None
