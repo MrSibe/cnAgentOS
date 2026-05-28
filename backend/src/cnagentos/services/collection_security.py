@@ -19,6 +19,14 @@ _DANGEROUS_HEADER_NAMES = {
     "proxy-authorization",
     "proxy-connection",
 }
+_ALLOWED_REQUEST_HEADER_NAMES = {
+    "accept",
+    "accept-language",
+    "content-type",
+    "if-modified-since",
+    "if-none-match",
+    "user-agent",
+}
 _SCRIPT_PATTERNS = (
     "<script",
     "javascript:",
@@ -177,6 +185,8 @@ def _validate_headers(headers: Mapping[str, Any] | None) -> None:
             or lowered.startswith("x-forwarded-")
         ):
             raise _source_unsafe("request_headers", "包含不允许由规则配置的请求头")
+        if lowered not in _ALLOWED_REQUEST_HEADER_NAMES:
+            raise _source_unsafe("request_headers", "包含不支持的请求头")
 
 
 def _validate_templates(value: Any, allowed_fields: frozenset[str], field: str) -> None:
@@ -206,7 +216,7 @@ def _validate_no_script_config(value: Any, field: str) -> None:
     elif isinstance(value, Mapping):
         for key, nested in value.items():
             lowered_key = str(key).lower()
-            if any(pattern.strip("(:<{%$") in lowered_key for pattern in ("script", "eval", "function")):
+            if re.search(r"^(script|eval|function)($|[_-])|[_-](script|eval|function)$", lowered_key):
                 raise _source_unsafe(field, "解析配置不得包含脚本字段")
             _validate_no_script_config(nested, field)
     elif isinstance(value, list):

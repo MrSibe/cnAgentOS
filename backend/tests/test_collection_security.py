@@ -68,7 +68,12 @@ def test_source_policy_rejects_unsafe_url_shapes(url):
     ],
 )
 def test_source_policy_rejects_local_private_and_metadata_targets(url, allowed_hosts):
-    assert_source_unsafe(validate_source_policy, url, allowed_hosts)
+    assert_source_unsafe(
+        validate_source_policy,
+        url,
+        allowed_hosts,
+        resolver=resolver_for({host.strip("[]"): ["93.184.216.34"] for host in allowed_hosts}),
+    )
 
 
 def test_source_policy_rejects_dns_results_with_private_addresses():
@@ -123,6 +128,15 @@ def test_rule_security_rejects_dangerous_headers(headers):
     )
 
 
+def test_rule_security_rejects_unsupported_headers():
+    assert_source_unsafe(
+        validate_rule_security,
+        {"X-Custom-Header": "value"},
+        {"query": "{{query}}"},
+        {"item_selector": ".news-item"},
+    )
+
+
 def test_rule_security_rejects_unknown_template_variables():
     assert_source_unsafe(
         validate_rule_security,
@@ -152,7 +166,7 @@ def test_rule_security_rejects_script_like_extractors(extractor_config):
 
 def test_rule_security_accepts_safe_rule_configuration():
     validate_rule_security(
-        {"Accept": "text/html"},
+        {"Accept": "text/html", "User-Agent": "cnAgentOS collector"},
         {"keyword": "{{query}}", "page": 1},
         {
             "item_selector": ".news-item",
@@ -160,6 +174,14 @@ def test_rule_security_accepts_safe_rule_configuration():
             "url_selector": "a@href",
             "content_selector": ".summary",
         },
+    )
+
+
+def test_rule_security_allows_non_executable_function_named_fields():
+    validate_rule_security(
+        {"Accept": "application/json"},
+        {"keyword": "{{query}}"},
+        {"my_function_transform": "title"},
     )
 
 
@@ -201,7 +223,7 @@ async def test_watch_audit_sanitizes_sensitive_detail(app):
             "watch.source.updated",
             "watch_source",
             "source-1",
-            "failed",
+            "rejected",
             {
                 "entry_url": "https://news.example.com/search?token=secret",
                 "auth_config": {"headers": {"Authorization": "Bearer secret"}},

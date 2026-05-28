@@ -70,7 +70,7 @@ async def write_watch_audit(
 ) -> None:
     if action not in WATCH_AUDIT_ACTIONS:
         raise ValueError(f"unsupported watch audit action: {action}")
-    if result not in {"succeeded", "failed"}:
+    if result not in {"succeeded", "failed", "rejected"}:
         raise ValueError(f"unsupported audit result: {result}")
     session.add(
         AuditLog(
