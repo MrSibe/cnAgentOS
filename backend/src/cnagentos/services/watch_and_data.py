@@ -36,6 +36,7 @@ from cnagentos.schemas import (
     WatchSourceCreate,
     WatchSourceUpdate,
 )
+from cnagentos.security import decrypt, encrypt
 from cnagentos.services.collection_security import (
     sanitize_collection_error,
     validate_fetch_target,
@@ -155,7 +156,6 @@ class WatchService:
             created_by=self.actor.id,
         )
         if payload.auth_config:
-            from cnagentos.security import encrypt
             auth_json = json.dumps(payload.auth_config)
             source.auth_ciphertext = encrypt(auth_json)
             source.auth_mask = "****已配置"
@@ -195,7 +195,6 @@ class WatchService:
         if "description" in payload.model_fields_set:
             source.description = payload.description
         if payload.auth_config is not None:
-            from cnagentos.security import encrypt
             auth_json = json.dumps(payload.auth_config)
             source.auth_ciphertext = encrypt(auth_json)
             source.auth_mask = "****已配置"
@@ -552,7 +551,6 @@ class WatchService:
 
         if source.auth_ciphertext:
             try:
-                from cnagentos.security import decrypt
                 auth_json = decrypt(source.auth_ciphertext)
                 auth_config = json.loads(auth_json)
                 if auth_config.get("headers"):

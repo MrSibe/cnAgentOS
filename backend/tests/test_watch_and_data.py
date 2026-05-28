@@ -51,6 +51,16 @@ def test_source_policy_allows_https_public_host():
     )
 
 
+def test_source_policy_with_mock_resolver():
+    """Source creation with mock resolver to avoid DNS dependency."""
+    # Use public IP (8.8.8.8 is Google's public DNS server)
+    validate_source_policy(
+        "https://test.example.com/page",
+        ["test.example.com"],
+        resolver=resolver_for({"test.example.com": ["8.8.8.8"]}),
+    )
+
+
 def test_source_policy_rejects_private_ip_in_allowed_hosts():
     """Phase 2 security: Private IPs not allowed even in allowed_hosts."""
     with pytest.raises(ApiError):
@@ -254,20 +264,3 @@ async def test_create_source_validates_https(client, admin_session):
         headers={"X-CSRF-Token": admin_session},
     )
     assert response.status_code == 422
-
-
-async def test_audit_log_records_source_creation(client, admin_session):
-    """Creating a source with valid data returns 201."""
-    response = await client.post(
-        "/api/v1/admin/watch-sources",
-        json={
-            "name": "Valid Source",
-            "source_type": "web_page",
-            "entry_url": "https://valid.example.com/page",
-            "allowed_hosts": ["valid.example.com"],
-        },
-        headers={"X-CSRF-Token": admin_session},
-    )
-    # Either 201 (success) or 422 (DNS resolution failure in test) is acceptable
-    # The important thing is HTTP validation works
-    assert response.status_code in (201, 422)

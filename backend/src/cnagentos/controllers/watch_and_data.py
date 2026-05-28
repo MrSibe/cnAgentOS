@@ -4,6 +4,7 @@ Watch and Data API controllers.
 Provides endpoints for data sources, rules, collection tasks, and knowledge items.
 """
 
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Annotated, Any
@@ -28,6 +29,10 @@ from cnagentos.schemas import (
     WatchSourceUpdate,
 )
 from cnagentos.services.watch_and_data import WatchService
+
+logger = logging.getLogger(__name__)
+
+_background_tasks: list = []
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["watch-and-data"])
@@ -271,7 +276,9 @@ async def run_task(
     import asyncio
     from cnagentos.app import app as fastapi_app
     sessionmaker = fastapi_app.state.sessionmaker
-    asyncio.create_task(_execute_task_background(task_id, sessionmaker))
+    task = asyncio.create_task(_execute_task_background(task_id, sessionmaker))
+    _background_tasks.append(task)
+    task.add_done_callback(lambda t: _background_tasks.remove(t) if t in _background_tasks else None)
 
     return success_response(request, {"id": task_id, "status": task.status})
 
@@ -280,16 +287,16 @@ async def _execute_task_background(task_id: str, sessionmaker) -> None:
     """Background task that creates its own session."""
     from cnagentos.services.watch_and_data import WatchService
     from cnagentos.models.entities import User
+    from sqlalchemy import select
     async with sessionmaker() as session:
         try:
-            from sqlalchemy import select
             actor = await session.get(User, "system-task")
             if actor is None:
                 actor = await session.scalar(select(User).limit(1))
             service = WatchService(session, actor, None)
             await service.execute_task(task_id)
         except Exception:
-            pass
+            logger.exception("Background task %s failed", task_id)
 
 
 # --- Knowledge Items ---
