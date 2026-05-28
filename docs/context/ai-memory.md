@@ -15,6 +15,7 @@
 - 2026-05-27：认证请求可以聚合页面初始化读取，但 RBAC 权限不得固化到登录会话；角色停用或权限移除必须在后续受保护请求立即生效。
 - 2026-05-28：仓库采用单仓前后端分离开发边界：`backend/` 承载 FastAPI/uv/Alembic/pytest，`frontend/` 承载 Vite Vue TypeScript/pnpm/Element Plus，`docs/` 仍在根目录作为共享契约；后端只提供 API，不托管前端页面或 `frontend/dist`。
 - 2026-05-28：模型调用统一走后端 OpenAI Python SDK 适配器；前端不直接接 OpenAI SDK 或 Vercel AI SDK，`httpx` 仅作为后端测试开发依赖保留。
+- 2026-05-28：Phase 2 A 采集安全基座先于采集业务落地；Phase 2 B 的数据源保存、任务执行和重定向处理必须复用服务端 SSRF 校验，首版默认只允许 HTTPS 与精确 host 白名单，不开放 HTTP 或内网例外。
 
 ## 追加模板
 
