@@ -89,3 +89,11 @@
 **原因**：MVP 管理端以表格、表单、弹窗、权限选择和流式状态展示为主，Element Plus 能覆盖通用后台交互；智能问数和引用展示保留自定义业务组件空间。
 
 **影响**：开发时 Vite 代理 `/api` 到 FastAPI；后端不托管前端构建产物。
+
+## 2026-05-28：模型调用采用 OpenAI Python SDK
+
+**决定**：后端模型引擎使用官方 `openai` Python SDK 的 `AsyncOpenAI` 调用 OpenAI-compatible Chat Completions；前端继续只消费后端 `/api/v1` 和 SSE，不引入 OpenAI 前端 SDK 或 Vercel AI SDK。
+
+**原因**：模型凭据、RBAC、审计、调用日志、SSE 编排和后续引用持久化均属于 FastAPI 后端职责；使用 Python SDK 能减少手写 HTTP/SSE 解析，同时保持现有 OpenAI-compatible 契约。
+
+**影响**：`openai` 是后端生产依赖；`httpx` 仅保留为后端测试开发依赖。后续普通问数和流式问数应复用模型 provider 适配器，不在 Controller 中直接拼接上游 `/chat/completions` 请求。

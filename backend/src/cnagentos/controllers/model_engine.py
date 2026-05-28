@@ -1,10 +1,7 @@
-import json
-import time
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Annotated, Any
 
-import httpx
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
@@ -15,7 +12,6 @@ from cnagentos.controllers.dependencies import (
     require_csrf,
     require_permission,
 )
-from cnagentos.models.entities import utc_now
 from cnagentos.schemas import (
     ConnectionTestRequest,
     ModelCallFilters,
@@ -176,89 +172,13 @@ async def connection_test_stream(
     context: ModelTester,
 ):
     service = service_for(request, session, context)
-    model, call_log, api_key = await service.connection_test_stream(model_id, payload)
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload_json = {
-        "model": model.model_name,
-        "messages": [{"role": "user", "content": payload.message}],
-        "stream": True,
-    }
-    start_time = time.monotonic()
-
-    async def generate() -> AsyncIterator[str]:
-        nonlocal call_log
-        full_reply = ""
-        try:
-            async with httpx.AsyncClient(timeout=model.timeout_seconds) as client:
-                async with client.stream(
-                    "POST",
-                    f"{model.base_url}/chat/completions",
-                    headers=headers,
-                    json=payload_json,
-                ) as response:
-                    if response.status_code != 200:
-                        latency_ms = int((time.monotonic() - start_time) * 1000)
-                        call_log.status = "failed"
-                        call_log.error_code = f"HTTP_{response.status_code}"
-                        call_log.latency_ms = latency_ms
-                        call_log.finished_at = utc_now()
-                        await session.commit()
-                        yield f"data: {json.dumps({'error': {'code': f'HTTP_{response.status_code}', 'message': '上游模型服务返回错误'}})}\n\n"
-                        yield f"data: [DONE]\n\n"
-                        return
-                    async for line in response.aiter_lines():
-                        if line.startswith("data: "):
-                            content = line[6:].strip()
-                            if content and content != "[DONE]":
-                                yield f"data: {content}\n\n"
-                                try:
-                                    chunk = json.loads(content)
-                                    delta = chunk.get("choices", [{}])[0].get("delta", {})
-                                    if "content" in delta:
-                                        full_reply += delta["content"]
-                                except Exception:
-                                    pass
-                    latency_ms = int((time.monotonic() - start_time) * 1000)
-                    call_log.status = "succeeded"
-                    call_log.latency_ms = latency_ms
-                    call_log.finished_at = utc_now()
-                    usage = {
-                        "prompt_tokens": call_log.prompt_tokens,
-                        "completion_tokens": call_log.completion_tokens,
-                        "total_tokens": call_log.total_tokens,
-                    }
-                    yield f"data: {json.dumps({'event': 'completed', 'call_log_id': call_log.id, 'usage': usage})}\n\n"
-                    await session.commit()
-                    yield f"data: [DONE]\n\n"
-        except Exception:
-            latency_ms = int((time.monotonic() - start_time) * 1000)
-            call_log.status = "failed"
-            call_log.error_code = "UPSTREAM_ERROR"
-            call_log.latency_ms = latency_ms
-            call_log.finished_at = utc_now()
-            await session.commit()
-            error_data = json.dumps({"error": {"code": "UPSTREAM_ERROR", "message": "流式响应出错"}})
-            yield f"data: {error_data}\n\n"
-            yield f"data: [DONE]\n\n"
-        finally:
-            if call_log.status == "running":
-                call_log.status = "failed"
-                call_log.error_code = "CLIENT_DISCONNECTED"
-                call_log.finished_at = utc_now()
-                try:
-                    await session.commit()
-                except Exception:
-                    pass
+    call_log_id, events = await service.connection_test_stream_events(model_id, payload)
 
     return StreamingResponse(
-        generate(),
+        events,
         media_type="text/event-stream",
         headers={
-            "X-Call-Log-ID": call_log.id,
+            "X-Call-Log-ID": call_log_id,
             "Cache-Control": "no-cache",
         },
     )
