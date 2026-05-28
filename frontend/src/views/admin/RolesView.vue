@@ -7,7 +7,7 @@ import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useSessionStore } from '@/stores/session'
 import type { PermissionItem, RoleItem } from '@/types'
-import { errorMessage } from '@/utils/display'
+import { errorMessage, isUserCancelled } from '@/utils/display'
 
 const session = useSessionStore()
 const loading = ref(false)
@@ -82,7 +82,7 @@ async function deleteRole(role: RoleItem): Promise<void> {
     ElMessage.success('角色已删除')
     await refreshAfterChange()
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
+    if (!isUserCancelled(error)) ElMessage.error(errorMessage(error))
   }
 }
 

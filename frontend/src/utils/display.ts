@@ -5,7 +5,9 @@ export function errorMessage(error: unknown): string {
 }
 
 export function shortTime(value?: string | null): string {
-  return value ? value.replace('T', ' ').replace('Z', '') : '-'
+  if (!value) return '-'
+  const m = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.exec(value)
+  return m ? m[0].replace('T', ' ') : value
 }
 
 export function statusType(status?: string | null): 'primary' | 'success' | 'info' | 'warning' | 'danger' {
@@ -13,4 +15,12 @@ export function statusType(status?: string | null): 'primary' | 'success' | 'inf
   if (status === 'disabled') return 'info'
   if (status === 'failed' || status === 'error') return 'danger'
   return 'primary'
+}
+
+/**
+ * ElMessageBox.confirm rejects with the strings 'cancel' or 'close'
+ * when the user dismisses the dialog without confirming.
+ */
+export function isUserCancelled(error: unknown): boolean {
+  return error === 'cancel' || error === 'close'
 }

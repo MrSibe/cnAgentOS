@@ -7,7 +7,7 @@ import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useSessionStore } from '@/stores/session'
 import type { FunctionItem, PermissionItem } from '@/types'
-import { errorMessage } from '@/utils/display'
+import { errorMessage, isUserCancelled } from '@/utils/display'
 
 const session = useSessionStore()
 const loading = ref(false)
@@ -92,7 +92,7 @@ async function toggleStatus(item: FunctionItem): Promise<void> {
     await patch<FunctionItem>(`/api/v1/admin/functions/${item.id}`, { status })
     await refreshAfterChange()
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
+    if (!isUserCancelled(error)) ElMessage.error(errorMessage(error))
   }
 }
 
@@ -103,7 +103,7 @@ async function deleteFunction(item: FunctionItem): Promise<void> {
     ElMessage.success('功能入口已删除')
     await refreshAfterChange()
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
+    if (!isUserCancelled(error)) ElMessage.error(errorMessage(error))
   }
 }
 

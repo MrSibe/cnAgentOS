@@ -6,7 +6,7 @@ import { get, patch, post } from '@/api/client'
 import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import type { RoleItem, UserItem } from '@/types'
-import { errorMessage, shortTime } from '@/utils/display'
+import { errorMessage, isUserCancelled, shortTime } from '@/utils/display'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -79,7 +79,7 @@ async function toggleStatus(user: UserItem): Promise<void> {
     ElMessage.success('用户状态已更新')
     await load()
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
+    if (!isUserCancelled(error)) ElMessage.error(errorMessage(error))
   }
 }
 
