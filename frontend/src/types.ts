@@ -154,6 +154,7 @@ export interface CollectionTaskDetail extends CollectionTaskItem {
 export interface KnowledgeItem {
   id: string
   source_id: string
+  source_name?: string | null
   task_id?: string | null
   title?: string | null
   summary?: string | null
@@ -161,7 +162,6 @@ export interface KnowledgeItem {
   status: string
   collected_at: string
   published_at?: string | null
-  source?: { id: string; name: string } | null
 }
 
 export interface KnowledgeItemDetail extends KnowledgeItem {

@@ -1,5 +1,17 @@
-interface ApiEnvelope<T> {
+export interface ApiMeta {
+  request_id?: string
+  page?: number
+  page_size?: number
+  total?: number
+  [key: string]: unknown
+}
+
+export interface ApiEnvelope<T> {
   data: T
+  meta?: ApiMeta
+  page?: number
+  page_size?: number
+  total?: number
 }
 
 interface ErrorPayload {
@@ -34,7 +46,7 @@ export function setCsrfToken(token: string): void {
   csrfToken = token
 }
 
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise<ApiEnvelope<T>> {
   const method = (init.method ?? 'GET').toUpperCase()
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
@@ -42,7 +54,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   if (csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) headers.set('X-CSRF-Token', csrfToken)
 
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers })
-  if (response.status === 204) return undefined as T
+  if (response.status === 204) return { data: undefined as T }
   const payload = (await response.json().catch(() => ({}))) as ApiEnvelope<T> & ErrorPayload
   if (!response.ok) {
     throw new ApiError(
@@ -52,10 +64,16 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       payload.error?.details,
     )
   }
+  return payload
+}
+
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const payload = await requestEnvelope<T>(path, init)
   return payload.data
 }
 
 export const get = <T>(path: string) => request<T>(path)
+export const getEnvelope = <T>(path: string) => requestEnvelope<T>(path)
 export const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) })
 export const patch = <T>(path: string, body: unknown) =>

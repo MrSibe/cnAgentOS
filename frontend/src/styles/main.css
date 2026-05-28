@@ -74,6 +74,7 @@ button, input, textarea, select { font: inherit; }
 .content-preview { color: var(--muted); line-height: 1.7; }
 .content-box { max-height: 420px; overflow: auto; white-space: pre-wrap; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, .04); line-height: 1.7; }
 .drawer-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.table-pagination { justify-content: flex-end; margin-top: 16px; }
 .login-screen { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 46px; align-items: center; padding: 8vw; }
 .login-story h1 { font-size: clamp(40px, 7vw, 84px); line-height: .94; margin: 0; letter-spacing: -.08em; }
 .login-story p { max-width: 520px; color: var(--muted); font-size: 18px; }

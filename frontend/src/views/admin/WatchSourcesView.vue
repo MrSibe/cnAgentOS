@@ -2,7 +2,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, reactive, ref } from 'vue'
 
-import { get, patch, post } from '@/api/client'
+import { get, getEnvelope, patch, post } from '@/api/client'
 import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useSessionStore } from '@/stores/session'
@@ -22,6 +22,7 @@ const editSourceVisible = ref(false)
 const editRuleVisible = ref(false)
 const taskVisible = ref(false)
 const sourceQuery = reactive({ q: '', status: '', source_type: '' })
+const pagination = reactive({ page: 1, page_size: 20, total: 0 })
 const emptySourceForm = () => ({
   name: '',
   source_type: 'web_page',
@@ -49,16 +50,26 @@ const canRunTask = computed(() => session.permissions.includes('watch.tasks.run'
 
 function buildQuery(): string {
   const params = new URLSearchParams()
+  params.set('page', String(pagination.page))
+  params.set('page_size', String(pagination.page_size))
   if (sourceQuery.q.trim()) params.set('q', sourceQuery.q.trim())
   if (sourceQuery.status) params.set('status', sourceQuery.status)
   if (sourceQuery.source_type) params.set('source_type', sourceQuery.source_type)
   return params.toString() ? `?${params}` : ''
 }
 
+function applyPagination(meta?: { page?: number; page_size?: number; total?: number }): void {
+  pagination.page = Number(meta?.page ?? pagination.page)
+  pagination.page_size = Number(meta?.page_size ?? pagination.page_size)
+  pagination.total = Number(meta?.total ?? sources.value.length)
+}
+
 async function loadSources(): Promise<void> {
   loading.value = true
   try {
-    sources.value = await get<WatchSourceItem[]>(`/api/v1/admin/watch-sources${buildQuery()}`)
+    const payload = await getEnvelope<WatchSourceItem[]>(`/api/v1/admin/watch-sources${buildQuery()}`)
+    sources.value = payload.data
+    applyPagination(payload.meta ?? payload)
     if (selectedSource.value) {
       selectedSource.value = sources.value.find((item) => item.id === selectedSource.value?.id) ?? null
       if (!selectedSource.value) rules.value = []
@@ -68,6 +79,22 @@ async function loadSources(): Promise<void> {
   } finally {
     loading.value = false
   }
+}
+
+function searchSources(): void {
+  pagination.page = 1
+  void loadSources()
+}
+
+function changePage(page: number): void {
+  pagination.page = page
+  void loadSources()
+}
+
+function changePageSize(pageSize: number): void {
+  pagination.page = 1
+  pagination.page_size = pageSize
+  void loadSources()
 }
 
 async function selectSource(source?: WatchSourceItem | null): Promise<void> {
@@ -119,7 +146,7 @@ function sourcePayload(form: ReturnType<typeof emptySourceForm>, includeAuth: bo
     description: form.description || null,
   }
   if (includeAuth || form.auth_config_text.trim()) {
-    body.auth_config = parseJsonObject(form.auth_config_text, '认证配置') ?? {}
+    body.auth_config = form.auth_config_text.trim() ? parseJsonObject(form.auth_config_text, '认证配置') : null
   }
   return body
 }
@@ -269,10 +296,10 @@ onMounted(loadSources)
 
 <template>
   <admin-page-header title="数据源与规则" description="配置受安全边界约束的数据源、解析规则，并发起手动采集任务。">
-    <el-input v-model="sourceQuery.q" class="toolbar-search" clearable placeholder="搜索数据源" @keyup.enter="loadSources" />
+    <el-input v-model="sourceQuery.q" class="toolbar-search" clearable placeholder="搜索数据源" @keyup.enter="searchSources" />
     <el-select v-model="sourceQuery.status" clearable placeholder="状态" style="width: 130px"><el-option value="active" label="active" /><el-option value="disabled" label="disabled" /></el-select>
     <el-select v-model="sourceQuery.source_type" clearable placeholder="类型" style="width: 140px"><el-option value="web_page" label="web_page" /><el-option value="web_api" label="web_api" /></el-select>
-    <el-button @click="loadSources">刷新</el-button>
+    <el-button @click="searchSources">刷新</el-button>
   </admin-page-header>
 
   <div class="resource-grid">
@@ -288,6 +315,16 @@ onMounted(loadSources)
         <el-table-column label="更新时间" min-width="160"><template #default="{ row }">{{ shortTime(row.updated_at) }}</template></el-table-column>
         <el-table-column label="操作" fixed="right" width="150"><template #default="{ row }"><el-button link type="primary" @click.stop="openSourceEdit(row)">编辑</el-button><el-button link @click.stop="toggleSource(row)">启停</el-button></template></el-table-column>
       </el-table>
+      <el-pagination
+        class="table-pagination"
+        layout="total, sizes, prev, pager, next"
+        :current-page="pagination.page"
+        :page-size="pagination.page_size"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="pagination.total"
+        @current-change="changePage"
+        @size-change="changePageSize"
+      />
     </el-card>
 
     <el-card class="editor-card" shadow="never">

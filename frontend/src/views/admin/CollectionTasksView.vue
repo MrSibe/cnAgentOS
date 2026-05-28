@@ -2,7 +2,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
 
-import { get, post } from '@/api/client'
+import { get, getEnvelope, post } from '@/api/client'
 import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import type { CollectionTaskDetail, CollectionTaskItem } from '@/types'
@@ -13,20 +13,31 @@ const detailLoading = ref(false)
 const tasks = ref<CollectionTaskItem[]>([])
 const detail = ref<CollectionTaskDetail | null>(null)
 const detailVisible = ref(false)
-const filters = reactive({ status: '', created_from: '', created_to: '' })
+const filters = reactive({ status: '', started_from: '', started_to: '' })
+const pagination = reactive({ page: 1, page_size: 20, total: 0 })
 
 function buildQuery(): string {
   const params = new URLSearchParams()
+  params.set('page', String(pagination.page))
+  params.set('page_size', String(pagination.page_size))
   if (filters.status) params.set('status', filters.status)
-  if (filters.created_from) params.set('created_from', filters.created_from)
-  if (filters.created_to) params.set('created_to', filters.created_to)
+  if (filters.started_from) params.set('started_from', filters.started_from)
+  if (filters.started_to) params.set('started_to', filters.started_to)
   return params.toString() ? `?${params}` : ''
+}
+
+function applyPagination(meta?: { page?: number; page_size?: number; total?: number }): void {
+  pagination.page = Number(meta?.page ?? pagination.page)
+  pagination.page_size = Number(meta?.page_size ?? pagination.page_size)
+  pagination.total = Number(meta?.total ?? tasks.value.length)
 }
 
 async function load(): Promise<void> {
   loading.value = true
   try {
-    tasks.value = await get<CollectionTaskItem[]>(`/api/v1/admin/collection-tasks${buildQuery()}`)
+    const payload = await getEnvelope<CollectionTaskItem[]>(`/api/v1/admin/collection-tasks${buildQuery()}`)
+    tasks.value = payload.data
+    applyPagination(payload.meta ?? payload)
   } catch (error) {
     ElMessage.warning(errorMessage(error))
   } finally {
@@ -58,6 +69,22 @@ async function cancelTask(task: CollectionTaskItem): Promise<void> {
   }
 }
 
+function search(): void {
+  pagination.page = 1
+  void load()
+}
+
+function changePage(page: number): void {
+  pagination.page = page
+  void load()
+}
+
+function changePageSize(pageSize: number): void {
+  pagination.page = 1
+  pagination.page_size = pageSize
+  void load()
+}
+
 onMounted(load)
 </script>
 
@@ -71,9 +98,9 @@ onMounted(load)
       <el-option value="failed" label="failed" />
       <el-option value="cancelled" label="cancelled" />
     </el-select>
-    <el-date-picker v-model="filters.created_from" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="开始时间" />
-    <el-date-picker v-model="filters.created_to" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="结束时间" />
-    <el-button @click="load">刷新</el-button>
+    <el-date-picker v-model="filters.started_from" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="开始时间" />
+    <el-date-picker v-model="filters.started_to" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="结束时间" />
+    <el-button @click="search">刷新</el-button>
   </admin-page-header>
 
   <el-card class="resource-card" shadow="never">
@@ -83,7 +110,6 @@ onMounted(load)
       <el-table-column prop="source_count" label="来源数" width="90" />
       <el-table-column prop="item_success_count" label="成功内容" width="105" />
       <el-table-column prop="item_failure_count" label="失败数量" width="105" />
-      <el-table-column prop="failure_summary" label="失败摘要" min-width="220" show-overflow-tooltip />
       <el-table-column label="创建时间" min-width="170"><template #default="{ row }">{{ shortTime(row.created_at) }}</template></el-table-column>
       <el-table-column label="完成时间" min-width="170"><template #default="{ row }">{{ shortTime(row.finished_at) }}</template></el-table-column>
       <el-table-column label="操作" fixed="right" width="140">
@@ -93,6 +119,16 @@ onMounted(load)
         </template>
       </el-table-column>
     </el-table>
+    <el-pagination
+      class="table-pagination"
+      layout="total, sizes, prev, pager, next"
+      :current-page="pagination.page"
+      :page-size="pagination.page_size"
+      :page-sizes="[10, 20, 50, 100]"
+      :total="pagination.total"
+      @current-change="changePage"
+      @size-change="changePageSize"
+    />
   </el-card>
 
   <el-drawer v-model="detailVisible" title="任务详情" size="560px">

@@ -2,7 +2,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, reactive, ref } from 'vue'
 
-import { get, patch } from '@/api/client'
+import { get, getEnvelope, patch } from '@/api/client'
 import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useSessionStore } from '@/stores/session'
@@ -23,10 +23,13 @@ const filters = reactive({
   collected_from: '',
   collected_to: '',
 })
+const pagination = reactive({ page: 1, page_size: 20, total: 0 })
 const canManageItems = computed(() => session.permissions.includes('data.items.manage'))
 
 function buildQuery(): string {
   const params = new URLSearchParams()
+  params.set('page', String(pagination.page))
+  params.set('page_size', String(pagination.page_size))
   if (filters.q.trim()) params.set('q', filters.q.trim())
   if (filters.source_id) params.set('source_id', filters.source_id)
   if (filters.status) params.set('status', filters.status)
@@ -37,21 +40,58 @@ function buildQuery(): string {
 
 async function loadSources(): Promise<void> {
   try {
-    sources.value = await get<WatchSourceItem[]>('/api/v1/admin/watch-sources?page_size=100')
+    const loaded: WatchSourceItem[] = []
+    let page = 1
+    let total = 0
+    do {
+      const payload = await getEnvelope<WatchSourceItem[]>(`/api/v1/admin/watch-sources?page=${page}&page_size=100`)
+      loaded.push(...payload.data)
+      total = Number((payload.meta ?? payload).total ?? loaded.length)
+      page += 1
+    } while (loaded.length < total)
+    sources.value = loaded
   } catch {
     sources.value = []
   }
 }
 
+function applyPagination(meta?: { page?: number; page_size?: number; total?: number }): void {
+  pagination.page = Number(meta?.page ?? pagination.page)
+  pagination.page_size = Number(meta?.page_size ?? pagination.page_size)
+  pagination.total = Number(meta?.total ?? items.value.length)
+}
+
 async function load(): Promise<void> {
   loading.value = true
   try {
-    items.value = await get<KnowledgeItem[]>(`/api/v1/admin/knowledge-items${buildQuery()}`)
+    const payload = await getEnvelope<KnowledgeItem[]>(`/api/v1/admin/knowledge-items${buildQuery()}`)
+    items.value = payload.data
+    applyPagination(payload.meta ?? payload)
   } catch (error) {
     ElMessage.warning(errorMessage(error))
   } finally {
     loading.value = false
   }
+}
+
+function search(): void {
+  pagination.page = 1
+  void load()
+}
+
+function changePage(page: number): void {
+  pagination.page = page
+  void load()
+}
+
+function changePageSize(pageSize: number): void {
+  pagination.page = 1
+  pagination.page_size = pageSize
+  void load()
+}
+
+function sourceName(item: KnowledgeItem): string {
+  return item.source_name || item.source_id
 }
 
 async function openDetail(item: KnowledgeItem): Promise<void> {
@@ -87,17 +127,17 @@ onMounted(async () => {
 
 <template>
   <admin-page-header title="数据仓库" description="查看标准化入库内容、追踪来源，并治理进入问数检索范围的内容状态。">
-    <el-input v-model="filters.q" class="toolbar-search" clearable placeholder="搜索标题或摘要" @keyup.enter="load" />
+    <el-input v-model="filters.q" class="toolbar-search" clearable placeholder="搜索标题或摘要" @keyup.enter="search" />
     <el-select v-model="filters.source_id" clearable filterable placeholder="来源" style="width: 180px"><el-option v-for="source in sources" :key="source.id" :value="source.id" :label="source.name" /></el-select>
     <el-select v-model="filters.status" clearable placeholder="状态" style="width: 140px"><el-option value="available" label="available" /><el-option value="excluded" label="excluded" /><el-option value="archived" label="archived" /></el-select>
-    <el-button @click="load">刷新</el-button>
+    <el-button @click="search">刷新</el-button>
   </admin-page-header>
 
   <el-card class="resource-card" shadow="never">
     <el-table v-loading="loading" :data="items">
       <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
       <el-table-column prop="summary" label="摘要" min-width="260" show-overflow-tooltip />
-      <el-table-column label="来源" min-width="150"><template #default="{ row }">{{ row.source?.name || row.source_id }}</template></el-table-column>
+      <el-table-column label="来源" min-width="150"><template #default="{ row }">{{ sourceName(row) }}</template></el-table-column>
       <el-table-column label="状态" width="125"><template #default="{ row }"><status-tag :value="row.status" /></template></el-table-column>
       <el-table-column label="采集时间" min-width="170"><template #default="{ row }">{{ shortTime(row.collected_at) }}</template></el-table-column>
       <el-table-column label="发布时间" min-width="170"><template #default="{ row }">{{ shortTime(row.published_at) }}</template></el-table-column>
@@ -117,6 +157,16 @@ onMounted(async () => {
         </template>
       </el-table-column>
     </el-table>
+    <el-pagination
+      class="table-pagination"
+      layout="total, sizes, prev, pager, next"
+      :current-page="pagination.page"
+      :page-size="pagination.page_size"
+      :page-sizes="[10, 20, 50, 100]"
+      :total="pagination.total"
+      @current-change="changePage"
+      @size-change="changePageSize"
+    />
   </el-card>
 
   <el-drawer v-model="detailVisible" title="内容详情" size="680px">
@@ -125,7 +175,7 @@ onMounted(async () => {
       <div class="detail-list">
         <p><strong>标题</strong><span>{{ detail.title || '-' }}</span></p>
         <p><strong>状态</strong><span><status-tag :value="detail.status" /></span></p>
-        <p><strong>来源</strong><span>{{ detail.source?.name || detail.source_id }}</span></p>
+        <p><strong>来源</strong><span>{{ sourceName(detail) }}</span></p>
         <p><strong>原始链接</strong><span><a v-if="detail.canonical_url" :href="detail.canonical_url" target="_blank" rel="noreferrer">{{ detail.canonical_url }}</a><template v-else>-</template></span></p>
         <p><strong>外部标识</strong><span>{{ detail.external_key || '-' }}</span></p>
         <p><strong>治理时间</strong><span>{{ shortTime(detail.reviewed_at) }}</span></p>
