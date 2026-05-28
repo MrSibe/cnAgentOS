@@ -13,9 +13,10 @@ const submitting = ref(false)
 const items = ref<ModelItem[]>([])
 const errorText = ref('')
 const output = ref('')
-const modelId = ref('model-main')
 const editVisible = ref(false)
+const testVisible = ref(false)
 const selected = ref<ModelItem | null>(null)
+const testingModel = ref<ModelItem | null>(null)
 const createForm = reactive({
   name: '',
   model_name: '',
@@ -116,11 +117,18 @@ async function setDefault(model: ModelItem): Promise<void> {
   }
 }
 
+function openTest(model: ModelItem): void {
+  testingModel.value = model
+  output.value = ''
+  testVisible.value = true
+}
+
 async function normalTest(): Promise<void> {
+  if (!testingModel.value) return
   output.value = ''
   try {
     const data = await post<{ reply: string; call_log_id: string; latency_ms: number; usage?: { total_tokens?: number } }>(
-      `/api/v1/admin/models/${encodeURIComponent(modelId.value)}/connection-tests`,
+      `/api/v1/admin/models/${encodeURIComponent(testingModel.value.id)}/connection-tests`,
       { message: '请回复连接正常', stream: false },
     )
     output.value = `${data.reply}\n\n调用记录：${data.call_log_id}\n耗时：${data.latency_ms}ms\nToken：${data.usage?.total_tokens ?? '-'}`
@@ -130,10 +138,11 @@ async function normalTest(): Promise<void> {
 }
 
 async function streamTest(): Promise<void> {
+  if (!testingModel.value) return
   output.value = ''
   try {
     await postStream(
-      `/api/v1/admin/models/${encodeURIComponent(modelId.value)}/connection-tests/stream`,
+      `/api/v1/admin/models/${encodeURIComponent(testingModel.value.id)}/connection-tests/stream`,
       { message: '请回复连接正常' },
       ({ event, data }) => {
         if (event === 'delta') output.value += String(data.content ?? '')
@@ -164,8 +173,9 @@ onMounted(load)
         <el-table-column label="状态" width="105"><template #default="{ row }"><status-tag :value="row.status" /></template></el-table-column>
         <el-table-column label="默认" width="90"><template #default="{ row }"><el-tag :type="row.is_default ? 'success' : 'info'" effect="plain">{{ row.is_default ? '默认' : '否' }}</el-tag></template></el-table-column>
         <el-table-column label="更新时间" min-width="170"><template #default="{ row }">{{ shortTime(row.updated_at) }}</template></el-table-column>
-        <el-table-column label="操作" fixed="right" width="230">
+        <el-table-column label="操作" fixed="right" width="290">
           <template #default="{ row }">
+            <el-button link type="primary" @click="openTest(row)">测试</el-button>
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button link @click="toggleStatus(row)">启停</el-button>
             <el-button link type="success" @click="setDefault(row)">设默认</el-button>
@@ -186,15 +196,14 @@ onMounted(load)
       </el-form>
     </el-card>
   </div>
-  <el-card class="resource-card" shadow="never">
-    <template #header><strong>模型测试</strong></template>
+  <el-dialog v-model="testVisible" :title="`模型测试 — ${testingModel?.name ?? ''}`" width="640px">
+    <p class="test-model-info">模型：{{ testingModel?.model_name }}　地址：{{ testingModel?.base_url }}</p>
     <div class="test-toolbar">
-      <el-input v-model="modelId" placeholder="模型 ID" />
       <el-button @click="normalTest">普通测试</el-button>
       <el-button type="primary" @click="streamTest">开始 SSE</el-button>
     </div>
     <pre class="stream-box">{{ output }}</pre>
-  </el-card>
+  </el-dialog>
   <el-dialog v-model="editVisible" title="编辑模型" width="560px">
     <el-form label-position="top" :model="editForm">
       <el-form-item label="名称"><el-input v-model="editForm.name" /></el-form-item>
