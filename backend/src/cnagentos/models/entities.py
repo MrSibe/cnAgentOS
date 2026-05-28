@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from cnagentos.db import Base
@@ -165,6 +165,15 @@ class ModelConfig(Base):
     )
 
     creator: Mapped[User | None] = relationship()
+
+    __table_args__ = (
+        Index(
+            "ix_model_configs_is_default",
+            is_default,
+            unique=True,
+            postgresql_where=is_default.is_(True),
+        ),
+    )
 
 
 class ModelCallLog(Base):

@@ -10,7 +10,7 @@ async def test_model_config_crud(client, admin_session):
             "provider_type": "openai_compatible",
             "model_name": "gpt-4o-mini",
             "base_url": "https://api.openai.com/v1",
-            "api_key": "sk-test-key-for-testing-123456789",
+            "api_key": "test-key-for-testing-123456789",
             "timeout_seconds": 30,
             "description": "用于测试的模型",
         },
@@ -23,7 +23,7 @@ async def test_model_config_crud(client, admin_session):
     assert data["status"] == "disabled"
     assert data["is_default"] is False
     body_str = json.dumps(created.json())
-    assert "sk-test" not in body_str
+    assert "test-api-key" not in body_str
     assert "credential_ciphertext" not in body_str
 
     single = await client.get(f"/api/v1/admin/models/{model_id}")
@@ -33,7 +33,7 @@ async def test_model_config_crud(client, admin_session):
     updated = await client.patch(
         f"/api/v1/admin/models/{model_id}",
         headers={"X-CSRF-Token": admin_session},
-        json={"name": "测试模型改", "api_key": "sk-new-key-abcdefghijk"},
+        json={"name": "测试模型改", "api_key": "test-new-key-abcdefghijk"},
     )
     assert updated.status_code == 200
     assert updated.json()["data"]["name"] == "测试模型改"
@@ -57,7 +57,7 @@ async def test_model_list_pagination_and_filters(client, admin_session):
             "name": "模型甲",
             "model_name": "model-a",
             "base_url": "https://api.example.com/v1",
-            "api_key": "sk-model-a-key-123456",
+            "api_key": "test-model-a-key-123456",
         },
     )
     await client.post(
@@ -67,7 +67,7 @@ async def test_model_list_pagination_and_filters(client, admin_session):
             "name": "模型乙",
             "model_name": "model-b",
             "base_url": "https://api.example.com/v1",
-            "api_key": "sk-model-b-key-789012",
+            "api_key": "test-model-b-key-789012",
         },
     )
 
@@ -98,7 +98,7 @@ async def test_model_status_activation_and_default(client, admin_session):
             "name": "默认测试模型",
             "model_name": "test-model",
             "base_url": "https://api.example.com/v1",
-            "api_key": "sk-default-test-key-123456",
+            "api_key": "test-default-test-key-123456",
         },
     )
     model_id = created.json()["data"]["id"]
@@ -135,7 +135,7 @@ async def test_model_requires_https(client, admin_session):
             "name": "不安全模型",
             "model_name": "model",
             "base_url": "http://insecure.example.com/v1",
-            "api_key": "sk-insecure-key-123",
+            "api_key": "test-insecure-key-123",
         },
     )
     assert resp.status_code == 400
@@ -210,7 +210,7 @@ async def test_model_permission_enforcement(client, app, admin_session):
                 "name": "非法创建",
                 "model_name": "test",
                 "base_url": "https://api.example.com/v1",
-                "api_key": "sk-key-123",
+                "api_key": "test-key-123",
             },
         )
         assert create_forbidden.status_code == 403

@@ -202,14 +202,12 @@ async def connection_test_stream(
                 ) as response:
                     if response.status_code != 200:
                         latency_ms = int((time.monotonic() - start_time) * 1000)
-                        error_body = await response.aread()
-                        error_text = error_body.decode("utf-8", errors="replace")[:500]
                         call_log.status = "failed"
                         call_log.error_code = f"HTTP_{response.status_code}"
                         call_log.latency_ms = latency_ms
                         call_log.finished_at = utc_now()
                         await session.commit()
-                        yield f"data: {json.dumps({'error': {'code': f'HTTP_{response.status_code}', 'message': f'上游返回错误 {response.status_code}', 'detail': error_text}})}\n\n"
+                        yield f"data: {json.dumps({'error': {'code': f'HTTP_{response.status_code}', 'message': '上游模型服务返回错误'}})}\n\n"
                         yield f"data: [DONE]\n\n"
                         return
                     async for line in response.aiter_lines():
@@ -246,6 +244,15 @@ async def connection_test_stream(
             error_data = json.dumps({"error": {"code": "UPSTREAM_ERROR", "message": "流式响应出错"}})
             yield f"data: {error_data}\n\n"
             yield f"data: [DONE]\n\n"
+        finally:
+            if call_log.status == "running":
+                call_log.status = "failed"
+                call_log.error_code = "CLIENT_DISCONNECTED"
+                call_log.finished_at = utc_now()
+                try:
+                    await session.commit()
+                except Exception:
+                    pass
 
     return StreamingResponse(
         generate(),

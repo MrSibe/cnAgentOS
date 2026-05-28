@@ -180,8 +180,8 @@ class ModelEngineService:
             decrypt(model.credential_ciphertext)
         except InvalidToken:
             raise ApiError(422, "MODEL_UNAVAILABLE", "默认模型必须配置有效凭据")
-        except Exception:
-            pass
+        except RuntimeError:
+            raise ApiError(422, "MODEL_UNAVAILABLE", "默认模型必须配置有效凭据")
         # 使用 FOR UPDATE 锁定当前默认模型，防止并发冲突
         results = (
             await self.session.scalars(
@@ -279,25 +279,11 @@ class ModelEngineService:
                     call_log.prompt_tokens = data["usage"].get("prompt_tokens")
                     call_log.completion_tokens = data["usage"].get("completion_tokens")
                     call_log.total_tokens = data["usage"].get("total_tokens")
-                if streamed:
-                    reply = ""
-                    for line in response.text.split("\n"):
-                        if line.startswith("data: "):
-                            content = line[6:].strip()
-                            if content and content != "[DONE]":
-                                try:
-                                    chunk = json.loads(content)
-                                    delta = chunk.get("choices", [{}])[0].get("delta", {})
-                                    if "content" in delta:
-                                        reply += delta["content"]
-                                except Exception:
-                                    pass
-                else:
-                    reply = (
-                        data.get("choices", [{}])[0]
-                        .get("message", {})
-                        .get("content", "")
-                    )
+                reply = (
+                    data.get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "")
+                )
                 return {"reply": reply, "usage": {
                     "prompt_tokens": call_log.prompt_tokens,
                     "completion_tokens": call_log.completion_tokens,
@@ -454,7 +440,7 @@ class ModelEngineService:
                     total_tokens = row.total_tokens
             elif row.status == "failed":
                 failed_calls = row.count
-            if row.avg_latency:
+            if row.avg_latency is not None:
                 latency_sum += row.avg_latency * row.count
                 latency_count += row.count
         if latency_count > 0:

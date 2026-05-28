@@ -74,11 +74,15 @@ export interface AuditLogItem {
 export interface ModelItem {
   id: string
   name: string
+  provider_type: string
   model_name: string
   base_url: string
+  credential_configured: boolean
   credential_mask?: string | null
   status: string
   is_default: boolean
+  timeout_seconds: number
+  description?: string | null
   updated_at?: string
 }
 
