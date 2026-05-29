@@ -101,13 +101,13 @@
 }
 ```
 
-规则：创建用途为 `connection_test` 的调用记录；上游失败返回脱敏 `502 UPSTREAM_ERROR`。
+规则：创建用途为 `connection_test` 的调用记录；上游 HTTP 状态失败返回脱敏 `502 UPSTREAM_ERROR`，连接失败返回 `502 CONNECTION_ERROR`，超时返回 `504 TIMEOUT`。
 
 ### `POST /api/v1/admin/models/{model_id}/connection-tests/stream`
 
 权限：`models.test`。请求：`{"message":"请回复连接正常"}`。
 
-响应：遵循 SSE 通用约定，`completed` 事件附带 `call_log_id` 与可获得的 usage 数据。
+响应：遵循 SSE 通用约定，`completed` 事件附带 `call_log_id` 与可获得的 usage 数据；流开始后的失败通过 `error` 事件返回脱敏错误码与消息。
 
 ## 统计
 
@@ -124,4 +124,3 @@
 权限：`models.view`。
 
 返回过滤时间范围内的总调用数、成功/失败数、总 token 与平均耗时；未提供 token 的上游调用不伪造计数。
-

@@ -1,5 +1,87 @@
 import json
 
+import httpx
+import pytest
+from openai import APIConnectionError, APIStatusError, APITimeoutError
+
+from cnagentos.services.model_provider import ModelProviderResponse, ModelProviderUsage
+
+
+async def create_active_model(client, admin_session, name="SDK 测试模型"):
+    created = await client.post(
+        "/api/v1/admin/models",
+        headers={"X-CSRF-Token": admin_session},
+        json={
+            "name": name,
+            "provider_type": "openai_compatible",
+            "model_name": "gpt-4o-mini",
+            "base_url": "https://api.example.com/v1",
+            "api_key": "test-sdk-key-123456789",
+            "timeout_seconds": 30,
+        },
+    )
+    assert created.status_code == 201
+    model_id = created.json()["data"]["id"]
+    activated = await client.patch(
+        f"/api/v1/admin/models/{model_id}/status",
+        headers={"X-CSRF-Token": admin_session},
+        json={"status": "active"},
+    )
+    assert activated.status_code == 200
+    return model_id
+
+
+class FakeProviderClient:
+    response = ModelProviderResponse(
+        reply="连接正常",
+        usage=ModelProviderUsage(prompt_tokens=10, completion_tokens=4, total_tokens=14),
+    )
+    error = None
+    stream_chunks = [
+        {"choices": [{"delta": {"content": "连接"}}]},
+        {"choices": [{"delta": {"content": "正常"}}]},
+    ]
+    stream_error = None
+    init_kwargs = []
+
+    def __init__(self, api_key, base_url, timeout_seconds):
+        self.__class__.init_kwargs.append(
+            {
+                "api_key": api_key,
+                "base_url": base_url,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+
+    async def complete_chat(self, model_name, message):
+        if self.error:
+            raise self.error
+        return self.response
+
+    async def stream_chat(self, model_name, message):
+        if self.stream_error:
+            raise self.stream_error
+        for chunk in self.stream_chunks:
+            yield chunk
+
+
+def reset_fake_provider():
+    FakeProviderClient.response = ModelProviderResponse(
+        reply="连接正常",
+        usage=ModelProviderUsage(prompt_tokens=10, completion_tokens=4, total_tokens=14),
+    )
+    FakeProviderClient.error = None
+    FakeProviderClient.stream_chunks = [
+        {"choices": [{"delta": {"content": "连接"}}]},
+        {"choices": [{"delta": {"content": "正常"}}]},
+    ]
+    FakeProviderClient.stream_error = None
+    FakeProviderClient.init_kwargs = []
+
+
+def openai_request():
+    return httpx.Request("POST", "https://api.example.com/v1/chat/completions")
+
 
 async def test_model_config_crud(client, admin_session):
     created = await client.post(
@@ -280,3 +362,158 @@ async def test_model_credential_mask_generation(client, admin_session):
     )
     assert short_key.status_code == 201
     assert short_key.json()["data"]["credential_mask"] == "********"
+
+
+async def test_connection_test_uses_openai_provider(monkeypatch, client, admin_session):
+    reset_fake_provider()
+    monkeypatch.setattr("cnagentos.services.model_engine.ModelProviderClient", FakeProviderClient)
+    model_id = await create_active_model(client, admin_session)
+
+    response = await client.post(
+        f"/api/v1/admin/models/{model_id}/connection-tests",
+        headers={"X-CSRF-Token": admin_session},
+        json={"message": "请回复连接正常", "stream": False},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["reply"] == "连接正常"
+    assert data["usage"] == {
+        "prompt_tokens": 10,
+        "completion_tokens": 4,
+        "total_tokens": 14,
+    }
+    assert FakeProviderClient.init_kwargs[-1]["base_url"] == "https://api.example.com/v1"
+    logs = await client.get("/api/v1/admin/model-calls", params={"model_id": model_id})
+    log = logs.json()["data"][0]
+    assert log["status"] == "succeeded"
+    assert log["streamed"] is False
+    assert log["total_tokens"] == 14
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "api_code", "log_code"),
+    [
+        (APITimeoutError(request=openai_request()), 504, "TIMEOUT", "TIMEOUT"),
+        (
+            APIConnectionError(request=openai_request()),
+            502,
+            "CONNECTION_ERROR",
+            "CONNECTION_ERROR",
+        ),
+        (
+            APIStatusError(
+                "upstream failed",
+                response=httpx.Response(500, request=openai_request()),
+                body=None,
+            ),
+            502,
+            "UPSTREAM_ERROR",
+            "UPSTREAM_ERROR",
+        ),
+    ],
+)
+async def test_connection_test_maps_openai_errors(
+    monkeypatch, client, admin_session, error, status_code, api_code, log_code
+):
+    reset_fake_provider()
+    FakeProviderClient.error = error
+    monkeypatch.setattr("cnagentos.services.model_engine.ModelProviderClient", FakeProviderClient)
+    model_id = await create_active_model(client, admin_session, name=f"错误模型 {log_code}")
+
+    response = await client.post(
+        f"/api/v1/admin/models/{model_id}/connection-tests",
+        headers={"X-CSRF-Token": admin_session},
+        json={"message": "请回复连接正常", "stream": False},
+    )
+
+    assert response.status_code == status_code
+    assert response.json()["error"]["code"] == api_code
+    logs = await client.get("/api/v1/admin/model-calls", params={"model_id": model_id})
+    log = logs.json()["data"][0]
+    assert log["status"] == "failed"
+    assert log["error_code"] == log_code
+
+
+async def test_stream_connection_test_uses_openai_provider(monkeypatch, client, admin_session):
+    reset_fake_provider()
+    monkeypatch.setattr("cnagentos.services.model_engine.ModelProviderClient", FakeProviderClient)
+    model_id = await create_active_model(client, admin_session, name="流式 SDK 测试模型")
+
+    async with client.stream(
+        "POST",
+        f"/api/v1/admin/models/{model_id}/connection-tests/stream",
+        headers={"X-CSRF-Token": admin_session},
+        json={"message": "请回复连接正常"},
+    ) as response:
+        body = await response.aread()
+
+    text = body.decode()
+    assert response.status_code == 200
+    assert '"content": "连接"' in text
+    assert '"content": "正常"' in text
+    assert '"event": "completed"' in text
+    assert "data: [DONE]" in text
+    logs = await client.get("/api/v1/admin/model-calls", params={"model_id": model_id})
+    log = logs.json()["data"][0]
+    assert log["status"] == "succeeded"
+    assert log["streamed"] is True
+
+
+async def test_stream_connection_test_marks_openai_error(
+    monkeypatch, client, admin_session
+):
+    reset_fake_provider()
+    FakeProviderClient.stream_error = APIStatusError(
+        "upstream failed",
+        response=httpx.Response(503, request=openai_request()),
+        body=None,
+    )
+    monkeypatch.setattr("cnagentos.services.model_engine.ModelProviderClient", FakeProviderClient)
+    model_id = await create_active_model(client, admin_session, name="流式错误模型")
+
+    async with client.stream(
+        "POST",
+        f"/api/v1/admin/models/{model_id}/connection-tests/stream",
+        headers={"X-CSRF-Token": admin_session},
+        json={"message": "请回复连接正常"},
+    ) as response:
+        body = await response.aread()
+
+    text = body.decode()
+    assert response.status_code == 200
+    assert "event: error" in text
+    assert '"event": "error"' in text
+    assert '"code": "HTTP_503"' in text
+    assert "data: [DONE]" in text
+    logs = await client.get("/api/v1/admin/model-calls", params={"model_id": model_id})
+    log = logs.json()["data"][0]
+    assert log["status"] == "failed"
+    assert log["error_code"] == "HTTP_503"
+
+
+async def test_stream_connection_test_marks_connection_error(
+    monkeypatch, client, admin_session
+):
+    reset_fake_provider()
+    FakeProviderClient.stream_error = APIConnectionError(request=openai_request())
+    monkeypatch.setattr("cnagentos.services.model_engine.ModelProviderClient", FakeProviderClient)
+    model_id = await create_active_model(client, admin_session, name="流式连接错误模型")
+
+    async with client.stream(
+        "POST",
+        f"/api/v1/admin/models/{model_id}/connection-tests/stream",
+        headers={"X-CSRF-Token": admin_session},
+        json={"message": "请回复连接正常"},
+    ) as response:
+        body = await response.aread()
+
+    text = body.decode()
+    assert response.status_code == 200
+    assert "event: error" in text
+    assert '"code": "CONNECTION_ERROR"' in text
+    assert "data: [DONE]" in text
+    logs = await client.get("/api/v1/admin/model-calls", params={"model_id": model_id})
+    log = logs.json()["data"][0]
+    assert log["status"] == "failed"
+    assert log["error_code"] == "CONNECTION_ERROR"

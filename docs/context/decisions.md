@@ -89,3 +89,19 @@
 **原因**：MVP 管理端以表格、表单、弹窗、权限选择和流式状态展示为主，Element Plus 能覆盖通用后台交互；智能问数和引用展示保留自定义业务组件空间。
 
 **影响**：开发时 Vite 代理 `/api` 到 FastAPI；后端不托管前端构建产物。
+
+## 2026-05-28：模型调用采用 OpenAI Python SDK
+
+**决定**：后端模型引擎使用官方 `openai` Python SDK 的 `AsyncOpenAI` 调用 OpenAI-compatible Chat Completions；前端继续只消费后端 `/api/v1` 和 SSE，不引入 OpenAI 前端 SDK 或 Vercel AI SDK。
+
+**原因**：模型凭据、RBAC、审计、调用日志、SSE 编排和后续引用持久化均属于 FastAPI 后端职责；使用 Python SDK 能减少手写 HTTP/SSE 解析，同时保持现有 OpenAI-compatible 契约。
+
+**影响**：`openai` 是后端生产依赖；`httpx` 仅保留为后端测试开发依赖。后续普通问数和流式问数应复用模型 provider 适配器，不在 Controller 中直接拼接上游 `/chat/completions` 请求。
+
+## 2026-05-28：Phase 2 采集安全采用保守 SSRF 策略
+
+**决定**：首版采集来源只允许 HTTPS；`allowed_hosts` 采用精确主机名匹配，不支持通配符、协议、端口或路径。数据源保存、任务执行和重定向每一跳都必须执行服务端安全校验，拒绝 URL userinfo、本地域名、回环/私网/链路本地/保留/组播/云元数据地址，以及 DNS 解析中出现任一非公网地址的目标。
+
+**原因**：Phase 2 的采集能力会主动访问外部地址，必须先把 SSRF、防内网探测和敏感失败信息泄露风险收紧，再交给数据源、规则和任务执行模块复用。
+
+**影响**：Phase 2 B 的数据源保存、启用、任务创建、任务执行和重定向处理必须调用采集安全组件；若后续确需开发环境 HTTP 或内网例外，需要先更新安全契约和本决策记录。

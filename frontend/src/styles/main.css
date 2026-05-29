@@ -85,5 +85,7 @@ button, input, textarea, select { font: inherit; }
 .login-card { padding: 18px; border-radius: 22px; }
 .login-submit { width: 100%; }
 .test-toolbar { display: flex; gap: 12px; margin-bottom: 14px; }
+.test-model-info { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+.test-status { margin-bottom: 12px; }
 .stream-box { min-height: 170px; padding: 16px; border-radius: 12px; color: #d9d2c6; background: #171510; white-space: pre-wrap; font-family: "Cascadia Code", Consolas, monospace; }
 @media (max-width: 980px) { .console-shell, .login-screen, .resource-grid { grid-template-columns: 1fr; } .sidebar { position: static; } .topbar, .page-heading { align-items: flex-start; flex-direction: column; } }

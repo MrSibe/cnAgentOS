@@ -200,3 +200,131 @@ class ModelCallLog(Base):
 
     model_config: Mapped[ModelConfig | None] = relationship()
     caller: Mapped[User | None] = relationship()
+
+
+class WatchSource(Base):
+    __tablename__ = "watch_sources"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    source_type: Mapped[str] = mapped_column(String(20))
+    entry_url: Mapped[str] = mapped_column(String(2048))
+    allowed_hosts: Mapped[list] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(20), default="disabled")
+    auth_ciphertext: Mapped[str | None] = mapped_column(Text)
+    auth_mask: Mapped[str | None] = mapped_column(String(120))
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    creator: Mapped[User | None] = relationship()
+    rules: Mapped[list["WatchRule"]] = relationship(
+        back_populates="source", cascade="all, delete-orphan"
+    )
+
+
+class WatchRule(Base):
+    __tablename__ = "watch_rules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("watch_sources.id"))
+    name: Mapped[str] = mapped_column(String(120))
+    request_method: Mapped[str] = mapped_column(String(10))
+    request_headers: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    request_params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    extractor_type: Mapped[str] = mapped_column(String(20))
+    extractor_config: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(20), default="disabled")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    source: Mapped[WatchSource] = relationship(back_populates="rules")
+
+
+class CollectionTask(Base):
+    __tablename__ = "collection_tasks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    trigger_type: Mapped[str] = mapped_column(String(20), default="manual")
+    source_count: Mapped[int] = mapped_column(Integer, default=0)
+    item_success_count: Mapped[int] = mapped_column(Integer, default=0)
+    item_failure_count: Mapped[int] = mapped_column(Integer, default=0)
+    failure_summary: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    creator: Mapped[User | None] = relationship()
+    task_sources: Mapped[list["CollectionTaskSource"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan"
+    )
+    knowledge_items: Mapped[list["CollectionTaskItem"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan"
+    )
+
+
+class CollectionTaskSource(Base):
+    __tablename__ = "collection_task_sources"
+
+    task_id: Mapped[str] = mapped_column(ForeignKey("collection_tasks.id"), primary_key=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("watch_sources.id"), primary_key=True)
+    rule_id: Mapped[str] = mapped_column(ForeignKey("watch_rules.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    failure_summary: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    task: Mapped[CollectionTask] = relationship(back_populates="task_sources")
+    source: Mapped[WatchSource] = relationship()
+    rule: Mapped[WatchRule] = relationship()
+
+
+class KnowledgeItem(Base):
+    __tablename__ = "knowledge_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("watch_sources.id"), nullable=True)
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("collection_tasks.id"), nullable=True)
+    external_key: Mapped[str | None] = mapped_column(String(512))
+    canonical_url: Mapped[str | None] = mapped_column(String(2048))
+    title: Mapped[str | None] = mapped_column(String(512))
+    content: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), default="available")
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    source: Mapped[WatchSource | None] = relationship()
+    task: Mapped[CollectionTask | None] = relationship()
+    reviewer: Mapped[User | None] = relationship()
+    task_items: Mapped[list["CollectionTaskItem"]] = relationship(
+        back_populates="knowledge_item", cascade="all, delete-orphan"
+    )
+
+
+class CollectionTaskItem(Base):
+    __tablename__ = "collection_task_items"
+
+    task_id: Mapped[str] = mapped_column(ForeignKey("collection_tasks.id"), primary_key=True)
+    knowledge_item_id: Mapped[str] = mapped_column(ForeignKey("knowledge_items.id"), primary_key=True)
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("watch_sources.id"), nullable=True)
+    ingest_result: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    task: Mapped[CollectionTask] = relationship(back_populates="knowledge_items")
+    knowledge_item: Mapped[KnowledgeItem] = relationship(back_populates="task_items")
+    source: Mapped[WatchSource | None] = relationship()

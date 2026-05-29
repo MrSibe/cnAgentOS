@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-正式产品处于 **Phase 1 A（平台与安全）与 Phase 1 B（模型引擎）后端已实现、Phase 1 C 管理端迁移到 Vue 脚手架联调中，Phase 2 C 管理端页面按契约开发中** 阶段。
+正式产品处于 **Phase 1 A（平台与安全）与 Phase 1 B（模型引擎）后端已实现、Phase 1 C 管理端迁移到 Vue 脚手架联调中，Phase 2 A 采集安全基座已进入实现** 阶段。
 
 Phase 0 工程底座已落地并调整为单仓前后端分离结构：`backend/` 承载 FastAPI + SQLAlchemy AsyncSession + Alembic + PostgreSQL 后端 API，`frontend/` 承载 Vite Vue TypeScript + Pinia + Vue Router + Element Plus 前端；Docker Compose 继续在根目录提供开发数据库。后端进程只提供 API、健康检查和 OpenAPI 文档，不托管前端页面或构建产物。
 
@@ -35,16 +35,56 @@ Phase 1 A 开发分支 `feat/phase-1-auth-rbac` 已完成认证/RBAC/导航/审�
 | 模型引擎 | 脱敏配置、默认模型、测试与调用统计 | `feat/phase-1-model-engine` 后端已实现，包含模型配置 CRUD、凭据加密脱敏、连接测试、流式测试、调用统计；集成测试待环境验证 |
 | 智能瞭望 | 数据源、规则和采集任务 | Phase 2 C 管理端页面与导航入口已按契约开发中；Phase 2 B 后端接口待开发 |
 | 数据仓库 | 标准化入库、去重和内容治理 | Phase 2 C 内容查看与治理页面已按契约开发中；Phase 2 B 后端接口待开发 |
+| 模型引擎 | 脱敏配置、默认模型、测试与调用统计 | `feat/phase-1-model-engine` 后端已实现，包含模型配置 CRUD、凭据加密脱敏、基于 OpenAI Python SDK 的连接测试、流式测试、调用统计；集成测试已覆盖模型引擎 |
+| 智能瞭望 | 数据源、规则和采集任务 | Phase 2 A 已实现采集 SSRF/规则安全校验基座；数据源、规则和采集任务业务 API 待 Phase 2 B 开发 |
+| 数据仓库 | 标准化入库、去重和内容治理 | 待开发 |
 | 智能问数 | 检索依据、流式回答与引用 | 待开发 |
-| 安全与审计 | 秘密保护、SSRF 防护与高风险动作审计 | Phase 1 A 已覆盖认证/RBAC/CSRF/审计基础；Phase 1 B 已实现凭据加密；采集安全待后续模块实现 |
+| 安全与审计 | 秘密保护、SSRF 防护与高风险动作审计 | Phase 1 A 已覆盖认证/RBAC/CSRF/审计基础；Phase 1 B 已实现凭据加密；Phase 2 A 已实现采集 SSRF 校验组件与 watch/data 脱敏审计 helper |
 
 ## 下一里程碑
 
-Phase 1 A（平台与安全）后端已实现，Phase 1 B 后端已实现，Phase 1 C 管理端已进入 Vue 脚手架迁移后的联调阶段。待完成：
+Phase 1 A（平台与安全）后端已实现，Phase 1 B 后端已实现，Phase 1 C 管理端已进入 Vue 脚手架迁移后的联调阶段。Phase 2 A/B 已完成实现。待完成：
 - A：补充审计查看功能评估与权限矩阵最终确认。
 - A/B/C：联调模型引擎 API 与管理端页面，补齐模型启停、设默认、连接测试、流式测试和调用记录等完整管理交互。
-- B：进入智能瞭望实现（数据源、规则、采集任务）。
-- C/B：等待 Phase 2 B 智能瞭望与数据仓库 API 落地后，联调 Phase 2 C 数据源、采集任务和内容治理页面。
+- C：智能瞭望数据源、规则、任务前端管理页面开发。
+- 数据仓库前端页面与智能问数功能开发。
+
+## Phase 2 B 实现摘要
+
+**分支**：`feat/phase-2-watch-data-v2`
+
+**已实现能力**：
+- 数据源 CRUD、状态管理（active/disabled）
+- 采集规则 CRUD、状态管理
+- 采集任务 CRUD、取消、执行（后台异步）
+- 知识库内容列表、详情、状态更新
+- Phase 2 A 采集安全组件复用（`validate_source_policy`、`validate_fetch_target`、`validate_rule_security`）
+- `watch_audit.write_watch_audit` 审计日志（含敏感信息脱敏）
+- 采集内容 HTML/JSON 提取、重复检测（SHA-256）
+- SSRF 校验：HTTPS 强制、私网 IP 拒绝、DNS rebinding 防护、精确 host 白名单
+
+**已实现接口**：
+
+| 模块 | 端点 | 状态 |
+| --- | --- | --- |
+| 数据源 | `GET/POST /api/v1/admin/watch-sources`、`GET/PATCH /watch-sources/{id}`、`PATCH /watch-sources/{id}/status` | 已实现 |
+| 采集规则 | `GET/POST /api/v1/admin/watch-sources/{id}/rules`、`PATCH /watch-rules/{id}` | 已实现 |
+| 采集任务 | `POST /api/v1/admin/collection-tasks`、`GET /collection-tasks`、`GET /collection-tasks/{id}`、`POST /collection-tasks/{id}/cancel`、`POST /collection-tasks/{id}/execute` | 已实现 |
+| 知识库 | `GET /api/v1/admin/knowledge-items`、`GET /knowledge-items/{id}`、`PATCH /knowledge-items/{id}/status` | 已实现 |
+
+**技术细节**：
+- 后台任务执行（`/execute`）使用 `asyncio.create_task` + `sessionmaker` 确保独立 session
+- 集成测试覆盖 22 条：SSRF 策略、HTTPS 强制、私网 IP 拒绝、DNS rebinding、端点存在性、CSRF 校验、审计日志
+
+**Phase 2 A 实现摘要**
+
+**分支**：`phase-2-collection-security`
+
+**已实现能力**：
+- 新增采集安全组件，支持数据源保存前和任务执行/重定向前的 HTTPS、精确 host 白名单、URL userinfo、本地域名、非公网 IP 与 DNS 解析结果校验。
+- 新增采集规则安全校验，拒绝敏感请求头、换行注入、未知模板变量、脚本型解析配置和任意表达式。
+- 新增 watch/data 审计 helper，约定数据源、规则、任务和内容治理动作代码，并对 URL 查询串、认证配置、请求头、Cookie、token、secret 等敏感信息脱敏。
+- 不新增可见导航入口，也不交付数据源 CRUD、任务执行器、内容入库或前端页面；Phase 2 B 必须在真实业务路径中调用本安全组件。
 
 ## Phase 1 A 实现摘要
 
@@ -82,9 +122,9 @@ Phase 1 A（平台与安全）后端已实现，Phase 1 B 后端已实现，Phas
 
 **技术细节**：
 - API 密钥使用 Fernet (AES-128-CBC + HMAC-SHA256) 加密存储，凭据掩码只显示 `****xxxx` 格式
-- 连接测试支持普通响应和 SSE 流式响应
+- 模型调用通过 OpenAI Python SDK 的 AsyncOpenAI 适配 OpenAI-compatible Chat Completions，连接测试支持普通响应和 SSE 流式响应
 - 模型调用记录包含耗时、token 使用量和脱敏错误分类
-- 集成测试覆盖 9 条：CRUD、列表过滤、脱敏验证、默认模型保护、权限控制
+- 集成测试覆盖 15 条：CRUD、列表过滤、脱敏验证、默认模型保护、权限控制、SDK 调用成功、上游错误映射、SSE 成功和流式错误处理
 
 ## Phase 2 C 实现摘要
 

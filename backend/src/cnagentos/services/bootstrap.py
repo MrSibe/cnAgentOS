@@ -39,6 +39,10 @@ SYSTEM_FUNCTIONS = [
         "functions.manage",
     ),
     ("admin_audit", "审计日志", "admin", "/admin/audit-logs", "history", 40, "audit.view"),
+    ("admin_audit", "审计日志", "/admin/audit-logs", "history", 40, "audit.view"),
+    ("admin_model_engine", "模型引擎", None, None, "cpu", 50, None),
+    ("admin_models", "模型配置", "admin_model_engine", "/admin/models", "settings", 10, "models.view"),
+    ("admin_model_calls", "调用记录", "admin_model_engine", "/admin/model-calls", "activity", 20, "models.view"),
     ("watch", "智能瞭望", None, None, "file-search", 20, None),
     (
         "watch_sources",
@@ -154,3 +158,23 @@ async def create_system_admin(
     session.add(UserRole(user_id=user.id, role_id=system_role.id))
     await session.commit()
     return user, True
+
+
+SYSTEM_TASK_USER_ID = "system-task"
+
+
+async def ensure_system_task_user(session: AsyncSession) -> User:
+    """Ensure the system-task user exists for background job audit attribution."""
+    user = await session.get(User, SYSTEM_TASK_USER_ID)
+    if user is None:
+        user = User(
+            id=SYSTEM_TASK_USER_ID,
+            username=SYSTEM_TASK_USER_ID,
+            display_name="System Task",
+            password_hash="",  # No password, cannot login
+            status="active",
+            is_system_admin=False,
+        )
+        session.add(user)
+        await session.flush()
+    return user

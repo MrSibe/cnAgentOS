@@ -1,15 +1,20 @@
 import json
 import time
-from datetime import datetime, timezone
+from collections.abc import AsyncIterator
+from datetime import datetime
 from uuid import uuid4
 
-import httpx
+from openai import APIConnectionError, APIStatusError, APITimeoutError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from cnagentos.api import ApiError
 from cnagentos.models.entities import AuditLog, ModelCallLog, ModelConfig, User, utc_now
+from cnagentos.services.model_provider import (
+    InvalidModelResponse,
+    ModelProviderClient,
+)
 from cnagentos.schemas import (
     ConnectionTestRequest,
     ModelCallFilters,
@@ -241,94 +246,75 @@ class ModelEngineService:
                 call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
                 await self.session.commit()
                 raise ApiError(500, "INTERNAL_ERROR", "加密模块未初始化")
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": model.model_name,
-                "messages": [{"role": "user", "content": message}],
-                "stream": streamed,
-            }
-            async with httpx.AsyncClient(timeout=model.timeout_seconds) as client:
-                response = await client.post(
-                    f"{model.base_url}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
-            latency_ms = int((time.monotonic() - start_time) * 1000)
-            call_log.latency_ms = latency_ms
+            try:
+                result = await ModelProviderClient(
+                    api_key=api_key,
+                    base_url=model.base_url,
+                    timeout_seconds=model.timeout_seconds,
+                ).complete_chat(model.model_name, message)
+            except InvalidModelResponse:
+                call_log.status = "failed"
+                call_log.error_code = "INVALID_RESPONSE"
+                call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
+                call_log.finished_at = utc_now()
+                await self.session.commit()
+                raise ApiError(502, "INVALID_RESPONSE", "上游返回了无效的响应格式")
+            except APIStatusError:
+                call_log.status = "failed"
+                call_log.error_code = "UPSTREAM_ERROR"
+                call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
+                call_log.finished_at = utc_now()
+                await self.session.commit()
+                raise ApiError(502, "UPSTREAM_ERROR", "模型服务返回错误")
+            call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
             call_log.finished_at = utc_now()
-            if response.status_code == 200:
-                try:
-                    data = response.json()
-                except json.JSONDecodeError:
-                    call_log.status = "failed"
-                    call_log.error_code = "INVALID_RESPONSE"
-                    await self.session.commit()
-                    raise ApiError(502, "INVALID_RESPONSE", "上游返回了无效的响应格式")
-                except Exception:
-                    call_log.status = "failed"
-                    call_log.error_code = "INVALID_RESPONSE"
-                    call_log.latency_ms = latency_ms
-                    call_log.finished_at = utc_now()
-                    await self.session.commit()
-                    raise ApiError(502, "INVALID_RESPONSE", "上游返回了无效的响应格式")
-                call_log.status = "succeeded"
-                if "usage" in data and data["usage"]:
-                    call_log.prompt_tokens = data["usage"].get("prompt_tokens")
-                    call_log.completion_tokens = data["usage"].get("completion_tokens")
-                    call_log.total_tokens = data["usage"].get("total_tokens")
-                reply = (
-                    data.get("choices", [{}])[0]
-                    .get("message", {})
-                    .get("content", "")
-                )
-                return {"reply": reply, "usage": {
+            call_log.status = "succeeded"
+            call_log.prompt_tokens = result.usage.prompt_tokens
+            call_log.completion_tokens = result.usage.completion_tokens
+            call_log.total_tokens = result.usage.total_tokens
+            return {
+                "reply": result.reply,
+                "usage": {
                     "prompt_tokens": call_log.prompt_tokens,
                     "completion_tokens": call_log.completion_tokens,
                     "total_tokens": call_log.total_tokens,
-                }}, call_log
-            else:
-                call_log.status = "failed"
-                call_log.error_code = "UPSTREAM_ERROR"
-                await self.session.commit()
-                raise ApiError(502, "UPSTREAM_ERROR", "模型服务返回错误")
-        except httpx.TimeoutException:
+                },
+            }, call_log
+        except APITimeoutError:
             call_log.status = "failed"
             call_log.error_code = "TIMEOUT"
             call_log.finished_at = utc_now()
             call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
             await self.session.commit()
-            raise ApiError(504, "UPSTREAM_ERROR", "模型服务响应超时")
-        except httpx.RequestError as exc:
+            raise ApiError(504, "TIMEOUT", "模型服务响应超时")
+        except APIConnectionError as exc:
             call_log.status = "failed"
             call_log.error_code = "CONNECTION_ERROR"
             call_log.finished_at = utc_now()
             call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
             await self.session.commit()
-            raise ApiError(502, "UPSTREAM_ERROR", f"无法连接到模型服务: {type(exc).__name__}")
+            raise ApiError(502, "CONNECTION_ERROR", f"无法连接到模型服务: {type(exc).__name__}")
 
-    async def connection_test(
-        self, model_id: str, payload: ConnectionTestRequest
-    ) -> dict:
-        model = await self.session.get(ModelConfig, model_id)
-        if model is None:
-            raise ApiError(404, "NOT_FOUND", "模型配置不存在")
-        if model.status != "active":
-            raise ApiError(409, "INVALID_STATE", "模型未启用，无法测试")
-        result, call_log = await self._call_model(model, payload.message, payload.stream)
+    def _stream_error_event(self, code: str, message: str) -> str:
+        payload = {"event": "error", "error": {"code": code, "message": message}}
+        return f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    async def _finalize_stream_call(
+        self,
+        call_log: ModelCallLog,
+        start_time: float,
+        status: str,
+        error_code: str | None = None,
+    ) -> None:
+        call_log.status = status
+        call_log.error_code = error_code
+        call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
+        call_log.finished_at = utc_now()
         await self.session.commit()
-        return {
-            "call_log_id": call_log.id,
-            "reply": result["reply"],
-            "usage": result["usage"],
-            "latency_ms": call_log.latency_ms,
-        }
 
-    async def connection_test_stream(
+    async def connection_test_stream_events(
         self, model_id: str, payload: ConnectionTestRequest
-    ) -> tuple[ModelConfig, ModelCallLog, str]:
+    ) -> tuple[str, AsyncIterator[str]]:
         model = await self.session.get(ModelConfig, model_id)
         if model is None:
             raise ApiError(404, "NOT_FOUND", "模型配置不存在")
@@ -351,7 +337,69 @@ class ModelEngineService:
         )
         self.session.add(call_log)
         await self.session.flush()
-        return model, call_log, api_key
+        start_time = time.monotonic()
+
+        async def generate() -> AsyncIterator[str]:
+            try:
+                async for chunk in ModelProviderClient(
+                    api_key=api_key,
+                    base_url=model.base_url,
+                    timeout_seconds=model.timeout_seconds,
+                ).stream_chat(model.model_name, payload.message):
+                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                await self._finalize_stream_call(call_log, start_time, "succeeded")
+                usage = {
+                    "prompt_tokens": call_log.prompt_tokens,
+                    "completion_tokens": call_log.completion_tokens,
+                    "total_tokens": call_log.total_tokens,
+                }
+                yield f"data: {json.dumps({'event': 'completed', 'call_log_id': call_log.id, 'usage': usage}, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+            except APIStatusError as exc:
+                error_code = f"HTTP_{exc.status_code}"
+                await self._finalize_stream_call(call_log, start_time, "failed", error_code)
+                yield self._stream_error_event(error_code, "上游模型服务返回错误")
+                yield "data: [DONE]\n\n"
+            except APITimeoutError:
+                await self._finalize_stream_call(call_log, start_time, "failed", "TIMEOUT")
+                yield self._stream_error_event("TIMEOUT", "模型服务响应超时")
+                yield "data: [DONE]\n\n"
+            except APIConnectionError:
+                await self._finalize_stream_call(call_log, start_time, "failed", "CONNECTION_ERROR")
+                yield self._stream_error_event("CONNECTION_ERROR", "无法连接到模型服务")
+                yield "data: [DONE]\n\n"
+            except Exception:
+                await self._finalize_stream_call(call_log, start_time, "failed", "UPSTREAM_ERROR")
+                yield self._stream_error_event("UPSTREAM_ERROR", "流式响应出错")
+                yield "data: [DONE]\n\n"
+            finally:
+                if call_log.status == "running":
+                    call_log.status = "failed"
+                    call_log.error_code = "CLIENT_DISCONNECTED"
+                    call_log.finished_at = utc_now()
+                    try:
+                        await self.session.commit()
+                    except Exception:
+                        pass
+
+        return call_log.id, generate()
+
+    async def connection_test(
+        self, model_id: str, payload: ConnectionTestRequest
+    ) -> dict:
+        model = await self.session.get(ModelConfig, model_id)
+        if model is None:
+            raise ApiError(404, "NOT_FOUND", "模型配置不存在")
+        if model.status != "active":
+            raise ApiError(409, "INVALID_STATE", "模型未启用，无法测试")
+        result, call_log = await self._call_model(model, payload.message, payload.stream)
+        await self.session.commit()
+        return {
+            "call_log_id": call_log.id,
+            "reply": result["reply"],
+            "usage": result["usage"],
+            "latency_ms": call_log.latency_ms,
+        }
 
     async def list_call_logs(
         self, page: int, page_size: int, filters: ModelCallFilters
