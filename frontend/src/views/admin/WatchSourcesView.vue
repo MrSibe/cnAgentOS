@@ -2,7 +2,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, reactive, ref } from 'vue'
 
-import { get, getEnvelope, patch, post } from '@/api/client'
+import { getEnvelope, patch, post } from '@/api/client'
 import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useSessionStore } from '@/stores/session'
@@ -22,7 +22,8 @@ const editSourceVisible = ref(false)
 const editRuleVisible = ref(false)
 const taskVisible = ref(false)
 const sourceQuery = reactive({ q: '', status: '', source_type: '' })
-const pagination = reactive({ page: 1, page_size: 20, total: 0 })
+const sourcePagination = reactive({ page: 1, page_size: 20, total: 0 })
+const rulePagination = reactive({ page: 1, page_size: 20, total: 0 })
 const emptySourceForm = () => ({
   name: '',
   source_type: 'web_page',
@@ -50,18 +51,31 @@ const canRunTask = computed(() => session.permissions.includes('watch.tasks.run'
 
 function buildQuery(): string {
   const params = new URLSearchParams()
-  params.set('page', String(pagination.page))
-  params.set('page_size', String(pagination.page_size))
+  params.set('page', String(sourcePagination.page))
+  params.set('page_size', String(sourcePagination.page_size))
   if (sourceQuery.q.trim()) params.set('q', sourceQuery.q.trim())
   if (sourceQuery.status) params.set('status', sourceQuery.status)
   if (sourceQuery.source_type) params.set('source_type', sourceQuery.source_type)
   return params.toString() ? `?${params}` : ''
 }
 
-function applyPagination(meta?: { page?: number; page_size?: number; total?: number }): void {
-  pagination.page = Number(meta?.page ?? pagination.page)
-  pagination.page_size = Number(meta?.page_size ?? pagination.page_size)
-  pagination.total = Number(meta?.total ?? sources.value.length)
+function buildRuleQuery(): string {
+  const params = new URLSearchParams()
+  params.set('page', String(rulePagination.page))
+  params.set('page_size', String(rulePagination.page_size))
+  return `?${params}`
+}
+
+function applySourcePagination(meta?: { page?: number; page_size?: number; total?: number }): void {
+  sourcePagination.page = Number(meta?.page ?? sourcePagination.page)
+  sourcePagination.page_size = Number(meta?.page_size ?? sourcePagination.page_size)
+  sourcePagination.total = Number(meta?.total ?? sources.value.length)
+}
+
+function applyRulePagination(meta?: { page?: number; page_size?: number; total?: number }): void {
+  rulePagination.page = Number(meta?.page ?? rulePagination.page)
+  rulePagination.page_size = Number(meta?.page_size ?? rulePagination.page_size)
+  rulePagination.total = Number(meta?.total ?? rules.value.length)
 }
 
 async function loadSources(): Promise<void> {
@@ -69,10 +83,13 @@ async function loadSources(): Promise<void> {
   try {
     const payload = await getEnvelope<WatchSourceItem[]>(`/api/v1/admin/watch-sources${buildQuery()}`)
     sources.value = payload.data
-    applyPagination(payload.meta ?? payload)
+    applySourcePagination(payload.meta ?? payload)
     if (selectedSource.value) {
       selectedSource.value = sources.value.find((item) => item.id === selectedSource.value?.id) ?? null
-      if (!selectedSource.value) rules.value = []
+      if (!selectedSource.value) {
+        rules.value = []
+        rulePagination.total = 0
+      }
     }
   } catch (error) {
     ElMessage.warning(errorMessage(error))
@@ -82,18 +99,18 @@ async function loadSources(): Promise<void> {
 }
 
 function searchSources(): void {
-  pagination.page = 1
+  sourcePagination.page = 1
   void loadSources()
 }
 
-function changePage(page: number): void {
-  pagination.page = page
+function changeSourcePage(page: number): void {
+  sourcePagination.page = page
   void loadSources()
 }
 
-function changePageSize(pageSize: number): void {
-  pagination.page = 1
-  pagination.page_size = pageSize
+function changeSourcePageSize(pageSize: number): void {
+  sourcePagination.page = 1
+  sourcePagination.page_size = pageSize
   void loadSources()
 }
 
@@ -101,9 +118,11 @@ async function selectSource(source?: WatchSourceItem | null): Promise<void> {
   if (!source) {
     selectedSource.value = null
     rules.value = []
+    rulePagination.total = 0
     return
   }
   selectedSource.value = source
+  rulePagination.page = 1
   await loadRules()
 }
 
@@ -111,12 +130,25 @@ async function loadRules(): Promise<void> {
   if (!selectedSource.value) return
   ruleLoading.value = true
   try {
-    rules.value = await get<WatchRuleItem[]>(`/api/v1/admin/watch-sources/${selectedSource.value.id}/rules`)
+    const payload = await getEnvelope<WatchRuleItem[]>(`/api/v1/admin/watch-sources/${selectedSource.value.id}/rules${buildRuleQuery()}`)
+    rules.value = payload.data
+    applyRulePagination(payload.meta ?? payload)
   } catch (error) {
     ElMessage.warning(errorMessage(error))
   } finally {
     ruleLoading.value = false
   }
+}
+
+function changeRulePage(page: number): void {
+  rulePagination.page = page
+  void loadRules()
+}
+
+function changeRulePageSize(pageSize: number): void {
+  rulePagination.page = 1
+  rulePagination.page_size = pageSize
+  void loadRules()
 }
 
 function parseJsonObject(value: string, field: string): Record<string, unknown> | null {
@@ -137,7 +169,7 @@ function jsonText(value?: Record<string, unknown> | null): string {
   return JSON.stringify(value ?? {}, null, 2)
 }
 
-function sourcePayload(form: ReturnType<typeof emptySourceForm>, includeAuth: boolean): Record<string, unknown> {
+function sourcePayload(form: ReturnType<typeof emptySourceForm>): Record<string, unknown> {
   const body: Record<string, unknown> = {
     name: form.name,
     source_type: form.source_type,
@@ -145,8 +177,8 @@ function sourcePayload(form: ReturnType<typeof emptySourceForm>, includeAuth: bo
     allowed_hosts: parseHosts(form.allowed_hosts_text),
     description: form.description || null,
   }
-  if (includeAuth || form.auth_config_text.trim()) {
-    body.auth_config = form.auth_config_text.trim() ? parseJsonObject(form.auth_config_text, '认证配置') : null
+  if (form.auth_config_text.trim()) {
+    body.auth_config = parseJsonObject(form.auth_config_text, '认证配置') ?? {}
   }
   return body
 }
@@ -167,7 +199,7 @@ function rulePayload(form: ReturnType<typeof emptyRuleForm> | typeof ruleEditFor
 async function createSource(): Promise<void> {
   submitting.value = true
   try {
-    await post<WatchSourceItem>('/api/v1/admin/watch-sources', sourcePayload(sourceForm, true))
+    await post<WatchSourceItem>('/api/v1/admin/watch-sources', sourcePayload(sourceForm))
     Object.assign(sourceForm, emptySourceForm())
     ElMessage.success('数据源已创建')
     await loadSources()
@@ -200,7 +232,7 @@ async function saveSource(): Promise<void> {
   if (!editingSource.value) return
   submitting.value = true
   try {
-    await patch<WatchSourceItem>(`/api/v1/admin/watch-sources/${editingSource.value.id}`, sourcePayload(sourceEditForm, false))
+    await patch<WatchSourceItem>(`/api/v1/admin/watch-sources/${editingSource.value.id}`, sourcePayload(sourceEditForm))
     closeSourceEdit()
     ElMessage.success('数据源已更新')
     await loadSources()
@@ -318,12 +350,12 @@ onMounted(loadSources)
       <el-pagination
         class="table-pagination"
         layout="total, sizes, prev, pager, next"
-        :current-page="pagination.page"
-        :page-size="pagination.page_size"
+        :current-page="sourcePagination.page"
+        :page-size="sourcePagination.page_size"
         :page-sizes="[10, 20, 50, 100]"
-        :total="pagination.total"
-        @current-change="changePage"
-        @size-change="changePageSize"
+        :total="sourcePagination.total"
+        @current-change="changeSourcePage"
+        @size-change="changeSourcePageSize"
       />
     </el-card>
 
@@ -353,6 +385,17 @@ onMounted(loadSources)
         <el-table-column label="更新时间" min-width="160"><template #default="{ row }">{{ shortTime(row.updated_at) }}</template></el-table-column>
         <el-table-column label="操作" fixed="right" width="170"><template #default="{ row }"><el-button link type="primary" @click="openRuleEdit(row)">编辑</el-button><el-button link type="success" :disabled="!canRunTask" @click="openTask(row)">运行</el-button></template></el-table-column>
       </el-table>
+      <el-pagination
+        v-if="selectedSource"
+        class="table-pagination"
+        layout="total, sizes, prev, pager, next"
+        :current-page="rulePagination.page"
+        :page-size="rulePagination.page_size"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="rulePagination.total"
+        @current-change="changeRulePage"
+        @size-change="changeRulePageSize"
+      />
     </el-card>
 
     <el-card class="editor-card" shadow="never">
