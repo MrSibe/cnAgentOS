@@ -18,6 +18,7 @@
 - 2026-05-29：Phase 2 已完成智能瞭望与数据仓库收口；后端 `watch_and_data` API、采集安全、内容治理、Vue 管理端页面和系统导航均已通过自动化验证。
 - 2026-05-29：修改 `SYSTEM_FUNCTIONS` 时每一项必须保持 7 元组格式；重复或旧格式导航项会导致 bootstrap 解包失败并阻断所有依赖初始化的后端测试。
 - 2026-05-29：Phase 3 C 智能问数页面应只调用 `docs/api/question-answering.md` 定义的 `/api/v1/qa/*` 接口，前端不得提交 `knowledge_item_id`、证据 ID 或自选引用范围。
+- 2026-05-29：Phase 3 B/C 实现问数 API 和页面时必须复用 `services/qa_security.py`，通过查询级所有权过滤保护会话/回答/引用，并让他人记录和不存在记录统一返回 `404`。
 
 ## 追加模板
 

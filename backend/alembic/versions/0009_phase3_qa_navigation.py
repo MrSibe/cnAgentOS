@@ -1,7 +1,7 @@
 """add phase 3 question answering navigation entry
 
-Revision ID: 0007_phase3_qa_navigation
-Revises: 0006_phase2_navigation_entries, 0006_phase2_watch_data
+Revision ID: 0009_phase3_qa_navigation
+Revises: 0008_phase3_qa_security
 Create Date: 2026-05-29
 """
 
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0007_phase3_qa_navigation"
-down_revision = ("0006_phase2_navigation_entries", "0006_phase2_watch_data")
+revision = "0009_phase3_qa_navigation"
+down_revision = "0008_phase3_qa_security"
 branch_labels = None
 depends_on = None
 

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 import { get, getEnvelope, patch, post, postStream } from '@/api/client'
 import StatusTag from '@/components/StatusTag.vue'
 import type { QaCitationItem, QaMessageItem, QaSessionItem } from '@/types'
 import { errorMessage, shortTime } from '@/utils/display'
+import { applyQaStreamEvent, inlineQaCitations } from '@/utils/qa'
 
 const loadingSessions = ref(false)
 const loadingMessages = ref(false)
@@ -20,6 +21,7 @@ const citationVisible = ref(false)
 const citationLoading = ref(false)
 const activeCitations = ref<QaCitationItem[]>([])
 const sessionPagination = reactive({ page: 1, page_size: 20, total: 0 })
+let sessionSearchTimer: number | undefined
 
 const askDisabled = computed(() => streaming.value || !question.value.trim())
 const selectedTitle = computed(() => selectedSession.value?.title || '未命名会话')
@@ -40,13 +42,6 @@ function applySessionPagination(meta?: { page?: number; page_size?: number; tota
 
 function localId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-function extractDeltaContent(data: Record<string, unknown>): string {
-  if (typeof data.content === 'string') return data.content
-  if (typeof data.delta === 'string') return data.delta
-  const choices = data.choices as Array<{ delta?: { content?: string }; text?: string }> | undefined
-  return choices?.[0]?.delta?.content ?? choices?.[0]?.text ?? ''
 }
 
 function citationStatus(citation: QaCitationItem): string | null | undefined {
@@ -96,6 +91,11 @@ async function openSession(session: QaSessionItem): Promise<void> {
 function searchSessions(): void {
   sessionPagination.page = 1
   void loadSessions(false)
+}
+
+function queueSearchSessions(): void {
+  if (sessionSearchTimer) window.clearTimeout(sessionSearchTimer)
+  sessionSearchTimer = window.setTimeout(searchSessions, 300)
 }
 
 function changeSessionPage(page: number): void {
@@ -179,20 +179,9 @@ async function askQuestion(): Promise<void> {
   streaming.value = true
   try {
     await postStream(`/api/v1/qa/sessions/${active.id}/questions/stream`, { question: text }, ({ event, data }) => {
+      applyQaStreamEvent(answerMessage, event, data)
       if (event === 'delta') {
-        answerMessage.content += extractDeltaContent(data)
         void scrollToBottom()
-      }
-      if (event === 'completed') {
-        answerMessage.status = 'completed'
-        if (typeof data.message_id === 'string') answerMessage.id = data.message_id
-        answerMessage.citations = Array.isArray(data.citations) ? (data.citations as QaCitationItem[]) : []
-      }
-      if (event === 'error') {
-        answerMessage.status = 'failed'
-        const streamError = data.error as { message?: string } | undefined
-        answerMessage.error_summary = String(streamError?.message ?? data.message ?? '回答生成失败')
-        if (!answerMessage.content) answerMessage.content = answerMessage.error_summary
       }
     })
     if (answerMessage.status === 'streaming') answerMessage.status = 'completed'
@@ -212,9 +201,9 @@ async function askQuestion(): Promise<void> {
 async function openCitations(message: QaMessageItem): Promise<void> {
   citationVisible.value = true
   citationLoading.value = true
-  activeCitations.value = message.citations ?? []
+  activeCitations.value = inlineQaCitations(message)
   try {
-    if (!message.id.startsWith('answer-')) {
+    if (!activeCitations.value.length) {
       activeCitations.value = await get<QaCitationItem[]>(`/api/v1/qa/messages/${message.id}/citations`)
     }
   } catch (error) {
@@ -226,6 +215,10 @@ async function openCitations(message: QaMessageItem): Promise<void> {
 
 onMounted(() => {
   void loadSessions()
+})
+
+onBeforeUnmount(() => {
+  if (sessionSearchTimer) window.clearTimeout(sessionSearchTimer)
 })
 </script>
 
@@ -239,7 +232,7 @@ onMounted(() => {
         </div>
         <el-button type="primary" @click="promptCreateSession">新建</el-button>
       </div>
-      <el-input v-model="sessionQuery" clearable placeholder="搜索会话" @keyup.enter="searchSessions" />
+      <el-input v-model="sessionQuery" clearable placeholder="搜索会话" @input="queueSearchSessions" @keyup.enter="searchSessions" />
       <div v-loading="loadingSessions" class="qa-session-list">
         <button
           v-for="session in sessions"

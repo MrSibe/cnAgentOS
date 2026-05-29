@@ -26,7 +26,7 @@ function firstNavigationRoute(): string {
     if (item.route_path) return item.route_path
     if (item.children?.length) stack.unshift(...item.children)
   }
-  return '/qa'
+  return '/admin/users'
 }
 
 async function submit(): Promise<void> {

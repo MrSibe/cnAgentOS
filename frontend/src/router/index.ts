@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import { useSessionStore } from '@/stores/session'
 
+const EmptyRoute = { render: () => null }
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -28,8 +30,8 @@ const router = createRouter({
       component: () => import('@/layouts/AdminLayout.vue'),
       children: [{ path: '', component: () => import('@/views/QaWorkspaceView.vue') }],
     },
-    { path: '/', redirect: '/qa' },
-    { path: '/:pathMatch(.*)*', redirect: '/qa' },
+    { path: '/', name: 'home', component: EmptyRoute },
+    { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
 
@@ -41,7 +43,7 @@ function firstNavigationRoute(session: ReturnType<typeof useSessionStore>): stri
     if (item.route_path) return item.route_path
     if (item.children?.length) stack.unshift(...item.children)
   }
-  return '/qa'
+  return '/admin/users'
 }
 
 router.beforeEach(async (to) => {
@@ -49,6 +51,7 @@ router.beforeEach(async (to) => {
   if (!session.initialized) await session.bootstrap().catch(() => undefined)
   if (to.meta.public) return session.authenticated ? firstNavigationRoute(session) : true
   if (!session.authenticated) return { name: 'login', query: { redirect: to.fullPath } }
+  if (to.name === 'home') return firstNavigationRoute(session)
   return true
 })
 
