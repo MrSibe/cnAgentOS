@@ -4,11 +4,11 @@
 
 ## 当前阶段
 
-正式产品处于 **Phase 2（智能瞭望采集与数据沉淀）已完成自动化验证，准备进入 Phase 3（智能问数闭环）** 阶段。
+正式产品处于 **Phase 3（智能问数闭环）A 安全地基已实现，准备进入 Phase 3 B/C 联调开发** 阶段。
 
 Phase 0 工程底座已落地并调整为单仓前后端分离结构：`backend/` 承载 FastAPI + SQLAlchemy AsyncSession + Alembic + PostgreSQL 后端 API，`frontend/` 承载 Vite Vue TypeScript + Pinia + Vue Router + Element Plus 前端；Docker Compose 继续在根目录提供开发数据库。后端进程只提供 API、健康检查和 OpenAPI 文档，不托管前端页面或构建产物。
 
-Phase 1 A 已完成认证/RBAC/导航/审计后端实现和集成测试。Phase 1 B 已完成模型配置、凭据加密脱敏、连接测试、流式测试和调用统计，并由管理端页面调用正式 `/api/v1` 接口。Phase 2 A/B/C 已收口：采集安全组件、数据源/规则/采集任务/知识库治理后端 API、系统导航入口和 Vue 管理端页面均已实现，并通过后端全量 pytest、前端构建和前端单元测试验证。
+Phase 1 A 已完成认证/RBAC/导航/审计后端实现和集成测试。Phase 1 B 已完成模型配置、凭据加密脱敏、连接测试、流式测试和调用统计，并由管理端页面调用正式 `/api/v1` 接口。Phase 2 A/B/C 已收口：采集安全组件、数据源/规则/采集任务/知识库治理后端 API、系统导航入口和 Vue 管理端页面均已实现，并通过后端全量 pytest、前端构建和前端单元测试验证。Phase 3 A 已完成问数基础表、会话所有权检查、问数审计脱敏和依据状态安全 helper。
 
 早期示例原型仅被用于提取需求，已经从正式开发上下文中废弃；它不作为功能完成状态，也不要求新实现保持兼容。后续开发应按 `docs/product/`、`docs/architecture/`、`docs/database/` 和 `docs/api/` 中的新契约建设。
 
@@ -35,15 +35,30 @@ Phase 1 A 已完成认证/RBAC/导航/审计后端实现和集成测试。Phase 
 | 模型引擎 | 脱敏配置、默认模型、测试与调用统计 | 已实现并通过集成测试；管理端已对接模型配置、启停、设默认、连接测试、流式测试和调用记录 |
 | 智能瞭望 | 数据源、规则和采集任务 | Phase 2 已实现并通过集成测试；包含 SSRF/规则安全校验、数据源 CRUD、规则 CRUD、采集任务创建/取消/执行和脱敏审计 |
 | 数据仓库 | 标准化入库、去重和内容治理 | Phase 2 已实现并通过集成测试；包含内容入库、SHA-256 去重、列表/详情查询和治理状态更新 |
-| 智能问数 | 检索依据、流式回答与引用 | 待开发 |
+| 智能问数 | 检索依据、流式回答与引用 | Phase 3 A 安全地基已实现；B/C 的检索、模型编排、SSE 与页面待开发 |
 | 安全与审计 | 秘密保护、SSRF 防护与高风险动作审计 | Phase 1 覆盖认证/RBAC/CSRF/审计基础和模型凭据加密；Phase 2 覆盖采集 SSRF 校验、规则安全校验和 watch/data 脱敏审计 |
 
 ## 下一里程碑
 
-Phase 2 已完成实现与自动化验证。下一里程碑进入 Phase 3 智能问数闭环，待完成：
-- B：实现问数会话、消息、引用、依据检索和模型编排 API。
+Phase 3 A 已完成安全地基。下一里程碑继续推进 Phase 3 智能问数闭环，待完成：
+- B：实现问数会话 API、消息/引用持久化、依据检索、模型编排和 SSE 回答 API，并复用 Phase 3 A 的 `qa_security` helper。
 - C：实现问数页面、SSE 回答展示、引用展示和历史会话回看。
-- A/B/C：补充问数权限隔离、失败状态、审计和端到端演示验收。
+- A/B/C：补充完整问数权限隔离、无依据问题、模型错误、流中断和端到端演示验收。
+
+## Phase 3 A 实现摘要
+
+**分支**：`feat/phase-3-qa-security`
+
+**已实现能力**：
+- 新增 `qa_sessions`、`qa_messages`、`qa_citations` 基础数据表和 Alembic 迁移，承接两个 Phase 2 迁移头。
+- 新增 `qa_security` 服务 helper：按查询条件执行会话/回答所有权过滤，外部会话与不存在会话统一返回 `404`。
+- 新增问数问题文本规范化、可用知识依据状态校验和 QA 审计脱敏写入能力。
+- 不新增对用户开放的 QA HTTP API、不实现检索、模型编排、SSE 或前端页面；这些仍属于 Phase 3 B/C。
+
+**技术细节**：
+- 所有权检查必须使用 `session_id + current_user.id` 或 answer message join 当前用户会话的查询级过滤。
+- QA 审计支持 `succeeded/failed/rejected`，并对 prompt、question、headers、token、secret、URL query 等敏感信息脱敏。
+- 集成测试覆盖自己的会话可访问、他人/不存在会话统一不可见、assistant 回答归属检查、问题校验、非 `available` 依据拒绝和审计脱敏。
 
 ## Phase 2 B 实现摘要
 
