@@ -120,6 +120,10 @@ async function changeStatus(item: KnowledgeItem, status: string): Promise<void> 
   }
 }
 
+function changeStatusFromCommand(item: KnowledgeItem, command: unknown): void {
+  void changeStatus(item, String(command))
+}
+
 onMounted(async () => {
   await Promise.all([loadSources(), load()])
 })
@@ -144,7 +148,7 @@ onMounted(async () => {
       <el-table-column label="操作" fixed="right" width="235">
         <template #default="{ row }">
           <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-          <el-dropdown trigger="click" :disabled="!canManageItems" @command="(status) => changeStatus(row, String(status))">
+          <el-dropdown trigger="click" :disabled="!canManageItems" @command="changeStatusFromCommand(row, $event)">
             <el-button link type="success" :disabled="!canManageItems">治理状态</el-button>
             <template #dropdown>
               <el-dropdown-menu>

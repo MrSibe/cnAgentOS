@@ -16,6 +16,7 @@
 | 首版关系型数据库 | PostgreSQL，开发环境由 Docker Compose 提供 | `docs/context/decisions.md` |
 | 普通用户账户开通方式 | 由管理员创建，MVP 不开放自助注册 | `docs/context/decisions.md` |
 | 前端实现方式 | Vue 3 + TypeScript + Vite + Pinia + Vue Router + Element Plus，`pnpm` 管理 | `docs/context/decisions.md` |
+| Phase 2 智能瞭望与数据仓库联调 | 数据源、采集任务和数据仓库治理页面已对接 Phase 2 B 后端接口，并通过后端 pytest、前端构建和单元测试 | `docs/context/current-status.md` |
 
 ## 高风险要求
 
@@ -30,12 +31,6 @@
 ## 待记录的实施问题
 
 后续开发遇到阻塞、兼容限制、安全取舍或未完成验收项时追加在此，并链接对应决策或任务。
-
-## Phase 2 C 发现的问题（2026-05-28）
-
-| 优先级 | 问题 | 建议方案 |
-| --- | --- | --- |
-| 中 | 数据源、采集任务和数据仓库治理页面已按 API 契约开发，但 Phase 2 B 后端接口尚未实现，无法完成真实联调 | Phase 2 B 实现 `docs/api/watch-and-data.md` 后，优先联调列表响应字段、分页参数、状态枚举和权限拒绝提示 |
 
 ## Phase 1 B 发现的问题（2026-05-27）
 
