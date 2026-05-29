@@ -334,12 +334,12 @@ class CollectionTaskItem(Base):
 # 智能问数 (Question Answering)
 # =============================================================================
 
-class QASession(Base):
+class QaSession(Base):
     __tablename__ = "qa_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    title: Mapped[str | None] = mapped_column(String(256))
+    title: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(20), default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -347,12 +347,12 @@ class QASession(Base):
     )
 
     user: Mapped[User] = relationship()
-    messages: Mapped[list["QAMessage"]] = relationship(
+    messages: Mapped[list["QaMessage"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )
 
 
-class QAMessage(Base):
+class QaMessage(Base):
     __tablename__ = "qa_messages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -370,15 +370,18 @@ class QAMessage(Base):
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
 
-    session: Mapped[QASession] = relationship(back_populates="messages")
-    reply_to: Mapped["QAMessage | None"] = relationship()
+    session: Mapped[QaSession] = relationship(back_populates="messages")
+    reply_to: Mapped["QaMessage | None"] = relationship(
+        remote_side=[id], back_populates="replies"
+    )
+    replies: Mapped[list["QaMessage"]] = relationship(back_populates="reply_to")
     model_call_log: Mapped[ModelCallLog | None] = relationship()
-    citations: Mapped[list["QACitation"]] = relationship(
+    citations: Mapped[list["QaCitation"]] = relationship(
         back_populates="message", cascade="all, delete-orphan"
     )
 
 
-class QACitation(Base):
+class QaCitation(Base):
     __tablename__ = "qa_citations"
 
     answer_message_id: Mapped[str] = mapped_column(
@@ -391,5 +394,5 @@ class QACitation(Base):
     excerpt: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
-    message: Mapped[QAMessage] = relationship(back_populates="citations")
+    message: Mapped[QaMessage] = relationship(back_populates="citations")
     knowledge_item: Mapped[KnowledgeItem] = relationship()

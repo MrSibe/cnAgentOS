@@ -6,7 +6,6 @@
 import json
 import time
 from collections.abc import AsyncIterator
-from datetime import datetime
 from uuid import uuid4
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError
@@ -16,36 +15,37 @@ from sqlalchemy.orm import selectinload
 
 from cnagentos.api import ApiError
 from cnagentos.models.entities import (
-    AuditLog,
     KnowledgeItem,
     ModelCallLog,
     ModelConfig,
-    QACitation,
-    QAMessage,
-    QASession,
+    QaCitation,
+    QaMessage,
+    QaSession,
     User,
     utc_now,
 )
 from cnagentos.schemas import (
     QASessionCreate,
-    QASessionFilters,
     QASessionUpdate,
     QAQuestionRequest,
 )
 from cnagentos.security import decrypt, InvalidToken
-from cnagentos.services.model_provider import (
-    ModelProviderClient,
-    InvalidModelResponse,
-)
+from cnagentos.services.model_provider import ModelProviderClient
 from cnagentos.services.qa_knowledge import (
     RetrievedKnowledge,
     retrieve_available_knowledge,
     build_prompt_with_context,
 )
+from cnagentos.services.qa_security import (
+    get_owned_session,
+    get_owned_answer_message,
+    validate_question_text,
+    validate_retrieved_knowledge_items,
+    write_qa_audit,
+)
 
 
 VALID_SESSION_STATUSES = {"active", "archived"}
-VALID_MESSAGE_ROLES = {"user", "assistant"}
 VALID_MESSAGE_STATUSES = {"completed", "streaming", "failed"}
 
 
@@ -60,32 +60,11 @@ class QAEngineService:
         self.actor_id = actor.id
         self.ip_address = ip_address
     
-    async def _audit(
-        self,
-        action: str,
-        target_type: str,
-        target_id: str | None,
-        result: str,
-        detail: dict | None = None,
-    ) -> None:
-        self.session.add(
-            AuditLog(
-                id=str(uuid4()),
-                actor_user_id=self.actor_id,
-                action=action,
-                target_type=target_type,
-                target_id=target_id,
-                result=result,
-                detail=detail,
-                ip_address=self.ip_address,
-            )
-        )
-    
     # -------------------------------------------------------------------------
     # 会话管理
     # -------------------------------------------------------------------------
     
-    async def _serialize_session(self, sess: QASession) -> dict:
+    async def _serialize_session(self, sess: QaSession) -> dict:
         return {
             "id": sess.id,
             "title": sess.title,
@@ -97,18 +76,18 @@ class QAEngineService:
     async def list_sessions(
         self, page: int, page_size: int, q: str | None
     ) -> tuple[list[dict], int]:
-        conditions = [QASession.user_id == self.actor_id]
+        conditions = [QaSession.user_id == self.actor_id]
         if q:
-            conditions.append(QASession.title.ilike(f"%{q}%"))
+            conditions.append(QaSession.title.ilike(f"%{q}%"))
         
         total = await self.session.scalar(
-            select(func.count()).select_from(QASession).where(*conditions)
+            select(func.count()).select_from(QaSession).where(*conditions)
         )
         sessions = (
             await self.session.scalars(
-                select(QASession)
+                select(QaSession)
                 .where(*conditions)
-                .order_by(QASession.updated_at.desc())
+                .order_by(QaSession.updated_at.desc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             )
@@ -117,31 +96,26 @@ class QAEngineService:
         return [await self._serialize_session(s) for s in sessions], int(total or 0)
     
     async def create_session(self, payload: QASessionCreate) -> dict:
-        session = QASession(
+        session = QaSession(
             id=str(uuid4()),
             user_id=self.actor_id,
             title=payload.title,
             status="active",
         )
         self.session.add(session)
-        await self._audit("qa.session.created", "qa_session", session.id, "succeeded")
+        await write_qa_audit(
+            self.session, self.actor, "qa.session.created", "qa_session",
+            session.id, "succeeded", {"title": session.title}, self.ip_address
+        )
         await self.session.commit()
         return await self._serialize_session(session)
     
     async def get_session(self, session_id: str) -> dict:
-        session = await self.session.get(QASession, session_id)
-        if session is None:
-            raise ApiError(404, "NOT_FOUND", "会话不存在")
-        if session.user_id != self.actor_id:
-            raise ApiError(403, "PERMISSION_DENIED", "无权访问此会话")
+        session = await get_owned_session(self.session, self.actor, session_id)
         return await self._serialize_session(session)
     
     async def update_session(self, session_id: str, payload: QASessionUpdate) -> dict:
-        session = await self.session.get(QASession, session_id)
-        if session is None:
-            raise ApiError(404, "NOT_FOUND", "会话不存在")
-        if session.user_id != self.actor_id:
-            raise ApiError(403, "PERMISSION_DENIED", "无权访问此会话")
+        session = await get_owned_session(self.session, self.actor, session_id)
         
         if payload.title is not None:
             session.title = payload.title
@@ -150,6 +124,10 @@ class QAEngineService:
                 raise ApiError(400, "VALIDATION_ERROR", "无效的会话状态")
             session.status = payload.status
         
+        await write_qa_audit(
+            self.session, self.actor, "qa.session.updated", "qa_session",
+            session.id, "succeeded", {"title": session.title, "status": session.status}, self.ip_address
+        )
         await self.session.commit()
         return await self._serialize_session(session)
     
@@ -157,7 +135,7 @@ class QAEngineService:
     # 消息管理
     # -------------------------------------------------------------------------
     
-    async def _serialize_message(self, msg: QAMessage) -> dict:
+    async def _serialize_message(self, msg: QaMessage) -> dict:
         citations = []
         for citation in msg.citations:
             ki = citation.knowledge_item
@@ -180,22 +158,18 @@ class QAEngineService:
         }
     
     async def list_messages(self, session_id: str) -> list[dict]:
-        session = await self.session.get(QASession, session_id)
-        if session is None:
-            raise ApiError(404, "NOT_FOUND", "会话不存在")
-        if session.user_id != self.actor_id:
-            raise ApiError(403, "PERMISSION_DENIED", "无权访问此会话")
+        session = await get_owned_session(self.session, self.actor, session_id)
         
         messages = (
             await self.session.scalars(
-                select(QAMessage)
+                select(QaMessage)
                 .options(
-                    selectinload(QAMessage.citations)
-                    .selectinload(QACitation.knowledge_item)
+                    selectinload(QaMessage.citations)
+                    .selectinload(QaCitation.knowledge_item)
                     .selectinload(KnowledgeItem.source)
                 )
-                .where(QAMessage.session_id == session_id)
-                .order_by(QAMessage.created_at.asc())
+                .where(QaMessage.session_id == session_id)
+                .order_by(QaMessage.created_at.asc())
             )
         ).all()
         
@@ -206,17 +180,7 @@ class QAEngineService:
     # -------------------------------------------------------------------------
     
     async def get_citations(self, message_id: str) -> list[dict]:
-        message = await self.session.get(
-            QAMessage,
-            message_id,
-            options=[selectinload(QAMessage.citations).selectinload(QACitation.knowledge_item)]
-        )
-        if message is None:
-            raise ApiError(404, "NOT_FOUND", "消息不存在")
-        
-        session = await self.session.get(QASession, message.session_id)
-        if session is None or session.user_id != self.actor_id:
-            raise ApiError(403, "PERMISSION_DENIED", "无权访问此引用")
+        message = await get_owned_answer_message(self.session, self.actor, message_id)
         
         citations = []
         for citation in message.citations:
@@ -255,22 +219,6 @@ class QAEngineService:
         payload = {"event": "error", "error": {"code": code, "message": message}}
         return f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
     
-    async def _finalize_stream_answer(
-        self,
-        answer_message: QAMessage,
-        call_log: ModelCallLog,
-        start_time: float,
-        status: str,
-        error_code: str | None = None,
-    ) -> None:
-        answer_message.status = status
-        answer_message.updated_at = utc_now()
-        call_log.status = status
-        call_log.error_code = error_code
-        call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
-        call_log.finished_at = utc_now()
-        await self.session.commit()
-    
     async def _save_citations(
         self,
         answer_message_id: str,
@@ -278,7 +226,7 @@ class QAEngineService:
     ) -> list[dict]:
         citations = []
         for rank, item in enumerate(knowledge_items, 1):
-            citation = QACitation(
+            citation = QaCitation(
                 answer_message_id=answer_message_id,
                 knowledge_item_id=item.knowledge_item_id,
                 rank=rank,
@@ -296,14 +244,12 @@ class QAEngineService:
     
     async def stream_question(
         self, session_id: str, payload: QAQuestionRequest
-    ) -> tuple[QAMessage, AsyncIterator[str]]:
-        session = await self.session.get(QASession, session_id)
-        if session is None:
-            raise ApiError(404, "NOT_FOUND", "会话不存在")
-        if session.user_id != self.actor_id:
-            raise ApiError(403, "PERMISSION_DENIED", "无权访问此会话")
+    ) -> tuple[QaMessage, AsyncIterator[str]]:
+        session = await get_owned_session(self.session, self.actor, session_id)
         if session.status != "active":
             raise ApiError(400, "INVALID_STATE", "会话已归档，无法提问")
+        
+        question = validate_question_text(payload.question)
         
         default_model = await self._get_default_model()
         if default_model is None:
@@ -316,16 +262,16 @@ class QAEngineService:
         except RuntimeError:
             raise ApiError(500, "INTERNAL_ERROR", "加密模块未初始化")
         
-        user_message = QAMessage(
+        user_message = QaMessage(
             id=str(uuid4()),
             session_id=session_id,
             role="user",
-            content=payload.question,
+            content=question,
             status="completed",
         )
         self.session.add(user_message)
         
-        answer_message = QAMessage(
+        answer_message = QaMessage(
             id=str(uuid4()),
             session_id=session_id,
             role="assistant",
@@ -347,13 +293,19 @@ class QAEngineService:
         )
         self.session.add(call_log)
         
+        await write_qa_audit(
+            self.session, self.actor, "qa.answer.started", "qa_message",
+            answer_message.id, "succeeded", {"session_id": session_id}, self.ip_address
+        )
+        
         await self.session.flush()
         
         knowledge_items = await retrieve_available_knowledge(
-            self.session, payload.question
+            self.session, question
         )
+        validated_items = validate_retrieved_knowledge_items(knowledge_items)
         
-        prompt = build_prompt_with_context(payload.question, knowledge_items)
+        prompt = build_prompt_with_context(question, validated_items)
         
         await self.session.commit()
         
@@ -382,7 +334,7 @@ class QAEngineService:
                 final_content = "".join(accumulated_content)
                 
                 async with self.session.begin():
-                    answer_message = await self.session.get(QAMessage, answer_message.id)
+                    answer_message = await self.session.get(QaMessage, answer_message.id)
                     if answer_message:
                         answer_message.content = final_content
                         answer_message.status = "completed"
@@ -394,12 +346,17 @@ class QAEngineService:
                             call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
                             call_log.finished_at = utc_now()
                         
-                        await self._save_citations(answer_message.id, knowledge_items)
-                        session_obj = await self.session.get(QASession, session_id)
+                        await self._save_citations(answer_message.id, validated_items)
+                        session_obj = await self.session.get(QaSession, session_id)
                         if session_obj:
                             session_obj.updated_at = utc_now()
                         
                         await self.session.commit()
+                
+                await write_qa_audit(
+                    self.session, self.actor, "qa.answer.completed", "qa_message",
+                    answer_message.id, "succeeded", {"citations_count": len(validated_items)}, self.ip_address
+                )
                 
                 citations_data = [
                     {
@@ -409,7 +366,7 @@ class QAEngineService:
                         "source_name": item.source_name,
                         "excerpt": item.excerpt,
                     }
-                    for rank, item in enumerate(knowledge_items, 1)
+                    for rank, item in enumerate(validated_items, 1)
                 ]
                 
                 completed_payload = {
@@ -421,85 +378,66 @@ class QAEngineService:
                 yield "data: [DONE]\n\n"
                 
             except APIStatusError as exc:
-                async with self.session.begin():
-                    answer_message = await self.session.get(QAMessage, answer_message.id)
-                    if answer_message:
-                        answer_message.status = "failed"
-                        answer_message.error_summary = "上游模型服务返回错误"
-                        answer_message.updated_at = utc_now()
-                    
-                    call_log = await self.session.get(ModelCallLog, call_log.id)
-                    if call_log:
-                        call_log.status = "failed"
-                        call_log.error_code = f"HTTP_{exc.status_code}"
-                        call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
-                        call_log.finished_at = utc_now()
-                    
-                    await self.session.commit()
-                
+                await self._handle_stream_error(
+                    answer_message.id, call_log.id, start_time,
+                    f"HTTP_{exc.status_code}", "上游模型服务返回错误"
+                )
                 yield self._stream_error_event(
                     f"HTTP_{exc.status_code}", "上游模型服务返回错误"
                 )
                 yield "data: [DONE]\n\n"
                 
             except APITimeoutError:
-                async with self.session.begin():
-                    answer_message = await self.session.get(QAMessage, answer_message.id)
-                    if answer_message:
-                        answer_message.status = "failed"
-                        answer_message.error_summary = "模型服务响应超时"
-                        answer_message.updated_at = utc_now()
-                    
-                    call_log = await self.session.get(ModelCallLog, call_log.id)
-                    if call_log:
-                        call_log.status = "failed"
-                        call_log.error_code = "TIMEOUT"
-                        call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
-                        call_log.finished_at = utc_now()
-                    
-                    await self.session.commit()
-                
+                await self._handle_stream_error(
+                    answer_message.id, call_log.id, start_time,
+                    "TIMEOUT", "模型服务响应超时"
+                )
                 yield self._stream_error_event("TIMEOUT", "模型服务响应超时")
                 yield "data: [DONE]\n\n"
                 
             except APIConnectionError:
-                async with self.session.begin():
-                    answer_message = await self.session.get(QAMessage, answer_message.id)
-                    if answer_message:
-                        answer_message.status = "failed"
-                        answer_message.error_summary = "无法连接到模型服务"
-                        answer_message.updated_at = utc_now()
-                    
-                    call_log = await self.session.get(ModelCallLog, call_log.id)
-                    if call_log:
-                        call_log.status = "failed"
-                        call_log.error_code = "CONNECTION_ERROR"
-                        call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
-                        call_log.finished_at = utc_now()
-                    
-                    await self.session.commit()
-                
+                await self._handle_stream_error(
+                    answer_message.id, call_log.id, start_time,
+                    "CONNECTION_ERROR", "无法连接到模型服务"
+                )
                 yield self._stream_error_event("CONNECTION_ERROR", "无法连接到模型服务")
                 yield "data: [DONE]\n\n"
                 
             except Exception:
-                async with self.session.begin():
-                    answer_message = await self.session.get(QAMessage, answer_message.id)
-                    if answer_message:
-                        answer_message.status = "failed"
-                        answer_message.error_summary = "流式响应出错"
-                        answer_message.updated_at = utc_now()
-                    
-                    call_log = await self.session.get(ModelCallLog, call_log.id)
-                    if call_log:
-                        call_log.status = "failed"
-                        call_log.error_code = "UPSTREAM_ERROR"
-                        call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
-                        call_log.finished_at = utc_now()
-                    
-                    await self.session.commit()
-                
+                await self._handle_stream_error(
+                    answer_message.id, call_log.id, start_time,
+                    "UPSTREAM_ERROR", "流式响应出错"
+                )
                 yield self._stream_error_event("UPSTREAM_ERROR", "流式响应出错")
                 yield "data: [DONE]\n\n"
         
         return answer_message, generate()
+    
+    async def _handle_stream_error(
+        self,
+        answer_id: str,
+        call_log_id: str,
+        start_time: float,
+        error_code: str,
+        error_msg: str,
+    ) -> None:
+        async with self.session.begin():
+            answer_message = await self.session.get(QaMessage, answer_id)
+            if answer_message:
+                answer_message.status = "failed"
+                answer_message.error_summary = error_msg
+                answer_message.updated_at = utc_now()
+            
+            call_log = await self.session.get(ModelCallLog, call_log_id)
+            if call_log:
+                call_log.status = "failed"
+                call_log.error_code = error_code
+                call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
+                call_log.finished_at = utc_now()
+            
+            await self.session.commit()
+        
+        await write_qa_audit(
+            self.session, self.actor, "qa.answer.failed", "qa_message",
+            answer_id, "failed", {"error_code": error_code}, self.ip_address
+        )

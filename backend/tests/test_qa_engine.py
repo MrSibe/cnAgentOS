@@ -353,20 +353,20 @@ async def test_session_isolation_between_users(client, admin_session):
         assert user2_login.status_code == 200
         user2_csrf = user2_login.json()["data"]["csrf_token"]
         
-        # 用户2不能访问用户1的会话
+        # 用户2不能访问用户1的会话（返回404避免信息泄露）
         user2_get = await user2_client.get(f"/api/v1/qa/sessions/{session_id}")
-        assert user2_get.status_code == 403
-        assert user2_get.json()["error"]["code"] == "PERMISSION_DENIED"
+        assert user2_get.status_code == 404
+        assert user2_get.json()["error"]["code"] == "NOT_FOUND"
         
         user2_update = await user2_client.patch(
             f"/api/v1/qa/sessions/{session_id}",
             headers={"X-CSRF-Token": user2_csrf},
             json={"title": "尝试修改"},
         )
-        assert user2_update.status_code == 403
+        assert user2_update.status_code == 404
         
         user2_messages = await user2_client.get(f"/api/v1/qa/sessions/{session_id}/messages")
-        assert user2_messages.status_code == 403
+        assert user2_messages.status_code == 404
 
 
 async def test_session_not_found(client, admin_session):

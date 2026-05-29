@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from cnagentos.models.entities import KnowledgeItem, WatchSource
+from cnagentos.models.entities import KnowledgeItem
 
 
 @dataclass
@@ -113,6 +113,7 @@ async def retrieve_available_knowledge(
         select(KnowledgeItem)
         .options(selectinload(KnowledgeItem.source))
         .where(KnowledgeItem.status == "available")
+        .limit(max_results * 3)
     )
     
     items = (await session.scalars(query)).all()
@@ -175,11 +176,15 @@ def _extract_keywords(question: str, max_keywords: int = 10) -> list[str]:
     return keywords[:max_keywords]
 
 
-def build_prompt_with_context(question: str, knowledge_items: list[RetrievedKnowledge]) -> str:
+def build_prompt_with_context(question: str, knowledge_items: list) -> str:
     """构建包含上下文的提示词
     
     将检索到的知识内容作为参考资料加入提示词。
     外部采集内容按不可信数据处理，在提示词中声明其仅作资料。
+    
+    Args:
+        question: 用户问题
+        knowledge_items: RetrievedKnowledge 列表或 KnowledgeItem 列表
     """
     if not knowledge_items:
         return (
@@ -190,9 +195,18 @@ def build_prompt_with_context(question: str, knowledge_items: list[RetrievedKnow
     
     context_parts = []
     for i, item in enumerate(knowledge_items, 1):
-        source_info = f"来源: {item.source_name}" if item.source_name else "来源: 未知"
-        title_info = f"标题: {item.title}" if item.title else ""
-        content_snippet = item.content[:500] + "..." if len(item.content) > 500 else item.content
+        if isinstance(item, RetrievedKnowledge):
+            title = item.title
+            content = item.content
+            source_name = item.source_name
+        else:
+            title = item.title
+            content = item.content
+            source_name = item.source.name if item.source else None
+        
+        source_info = f"来源: {source_name}" if source_name else "来源: 未知"
+        title_info = f"标题: {title}" if title else ""
+        content_snippet = content[:500] + "..." if len(content) > 500 else content
         
         context_parts.append(
             f"[参考资料 {i}]\n"
