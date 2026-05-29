@@ -23,15 +23,31 @@ const router = createRouter({
         { path: 'audit-logs', component: () => import('@/views/admin/AuditLogsView.vue') },
       ],
     },
-    { path: '/', redirect: '/admin/users' },
-    { path: '/:pathMatch(.*)*', redirect: '/admin/users' },
+    {
+      path: '/qa',
+      component: () => import('@/layouts/AdminLayout.vue'),
+      children: [{ path: '', component: () => import('@/views/QaWorkspaceView.vue') }],
+    },
+    { path: '/', redirect: '/qa' },
+    { path: '/:pathMatch(.*)*', redirect: '/qa' },
   ],
 })
+
+function firstNavigationRoute(session: ReturnType<typeof useSessionStore>): string {
+  const stack = [...session.navigation]
+  while (stack.length) {
+    const item = stack.shift()
+    if (!item) continue
+    if (item.route_path) return item.route_path
+    if (item.children?.length) stack.unshift(...item.children)
+  }
+  return '/qa'
+}
 
 router.beforeEach(async (to) => {
   const session = useSessionStore()
   if (!session.initialized) await session.bootstrap().catch(() => undefined)
-  if (to.meta.public) return session.authenticated ? '/admin/users' : true
+  if (to.meta.public) return session.authenticated ? firstNavigationRoute(session) : true
   if (!session.authenticated) return { name: 'login', query: { redirect: to.fullPath } }
   return true
 })

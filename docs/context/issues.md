@@ -18,6 +18,12 @@
 | 前端实现方式 | Vue 3 + TypeScript + Vite + Pinia + Vue Router + Element Plus，`pnpm` 管理 | `docs/context/decisions.md` |
 | Phase 2 智能瞭望与数据仓库联调 | 数据源、采集任务和数据仓库治理页面已对接 Phase 2 B 后端接口，并通过后端 pytest、前端构建和单元测试 | `docs/context/current-status.md` |
 
+## Phase 3 C 当前风险（2026-05-29）
+
+| 风险 | 当前判断 | 后续处理 |
+| --- | --- | --- |
+| 智能问数页面联调依赖 | C 侧页面已按 `/api/v1/qa/*` 契约开发，但当前分支不实现 Phase 3 B 问数后端接口 | B 完成会话、消息、流式回答和引用接口后，C 侧再做真实联调与端到端验收 |
+
 ## 高风险要求
 
 | 风险 | 必须采取的控制 |

@@ -171,3 +171,34 @@ export interface KnowledgeItemDetail extends KnowledgeItem {
   reviewed_by?: SessionUser | null
   reviewed_at?: string | null
 }
+
+export interface QaSessionItem {
+  id: string
+  title?: string | null
+  status: string
+  updated_at?: string
+  created_at?: string
+}
+
+export interface QaCitationItem {
+  knowledge_item_id: string
+  rank: number
+  title?: string | null
+  source_name?: string | null
+  excerpt: string
+  status?: string | null
+  current_status?: string | null
+}
+
+export interface QaMessageItem {
+  id: string
+  session_id?: string
+  role: 'user' | 'assistant'
+  reply_to_id?: string | null
+  content: string
+  status: string
+  error_summary?: string | null
+  citations?: QaCitationItem[]
+  created_at?: string
+  updated_at?: string
+}

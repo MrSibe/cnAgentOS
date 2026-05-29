@@ -18,12 +18,23 @@ const rules: FormRules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
+function firstNavigationRoute(): string {
+  const stack = [...session.navigation]
+  while (stack.length) {
+    const item = stack.shift()
+    if (!item) continue
+    if (item.route_path) return item.route_path
+    if (item.children?.length) stack.unshift(...item.children)
+  }
+  return '/qa'
+}
+
 async function submit(): Promise<void> {
   if (!(await formRef.value?.validate().catch(() => false))) return
   loading.value = true
   try {
     await session.login(credentials)
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/admin/users'
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : firstNavigationRoute()
     await router.replace(redirect)
   } catch (error) {
     ElMessage.error(errorMessage(error))

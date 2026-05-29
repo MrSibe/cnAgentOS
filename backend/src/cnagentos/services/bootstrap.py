@@ -71,6 +71,7 @@ SYSTEM_FUNCTIONS = [
         10,
         "data.items.view",
     ),
+    ("qa", "智能问数", None, "/qa", "sparkles", 40, "qa.use"),
 ]
 
 

@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-正式产品处于 **Phase 2（智能瞭望采集与数据沉淀）已完成自动化验证，准备进入 Phase 3（智能问数闭环）** 阶段。
+正式产品处于 **Phase 2（智能瞭望采集与数据沉淀）已完成自动化验证，Phase 3（智能问数闭环）C 端页面开发中** 阶段。
 
 Phase 0 工程底座已落地并调整为单仓前后端分离结构：`backend/` 承载 FastAPI + SQLAlchemy AsyncSession + Alembic + PostgreSQL 后端 API，`frontend/` 承载 Vite Vue TypeScript + Pinia + Vue Router + Element Plus 前端；Docker Compose 继续在根目录提供开发数据库。后端进程只提供 API、健康检查和 OpenAPI 文档，不托管前端页面或构建产物。
 
@@ -42,8 +42,23 @@ Phase 1 A 已完成认证/RBAC/导航/审计后端实现和集成测试。Phase 
 
 Phase 2 已完成实现与自动化验证。下一里程碑进入 Phase 3 智能问数闭环，待完成：
 - B：实现问数会话、消息、引用、依据检索和模型编排 API。
-- C：实现问数页面、SSE 回答展示、引用展示和历史会话回看。
+- C：问数页面、SSE 回答展示、引用展示和历史会话回看已按契约开发中，等待 B 后端接口联调。
 - A/B/C：补充问数权限隔离、失败状态、审计和端到端演示验收。
+
+## Phase 3 C 实现摘要
+
+**分支**：`feat/phase3-c-qa-ui`
+
+**管理端/用户端页面**（对接 `docs/api/question-answering.md` 契约）：
+
+| 页面 | 路由 | 状态 |
+| --- | --- | --- |
+| 智能问数工作台 | `/qa` | 已补页面骨架、会话列表、新建/重命名/归档、历史消息、SSE 提问回答、引用抽屉 |
+
+**技术细节**：
+- 前端只提交用户问题，不提交 `knowledge_item_id` 或手工依据；引用由服务端完成检索并通过 SSE completed 事件或引用接口返回。
+- 新增系统导航入口 `qa`，关联 `qa.use` 权限，已有库通过 Alembic 迁移补齐入口。
+- Phase 3 B 后端接口尚未实现，当前页面按正式契约先行，待 `/api/v1/qa/*` 落地后联调。
 
 ## Phase 2 B 实现摘要
 

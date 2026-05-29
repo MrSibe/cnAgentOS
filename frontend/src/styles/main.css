@@ -88,4 +88,33 @@ button, input, textarea, select { font: inherit; }
 .test-model-info { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
 .test-status { margin-bottom: 12px; }
 .stream-box { min-height: 170px; padding: 16px; border-radius: 12px; color: #d9d2c6; background: #171510; white-space: pre-wrap; font-family: "Cascadia Code", Consolas, monospace; }
-@media (max-width: 980px) { .console-shell, .login-screen, .resource-grid { grid-template-columns: 1fr; } .sidebar { position: static; } .topbar, .page-heading { align-items: flex-start; flex-direction: column; } }
+.qa-workbench { min-height: calc(100vh - 120px); display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; }
+.qa-sessions, .qa-panel { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); }
+.qa-sessions { padding: 16px; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 14px; }
+.qa-sessions-head, .qa-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.qa-sessions-head h1, .qa-panel-head h2 { margin: 0; letter-spacing: 0; }
+.qa-session-list { min-height: 240px; overflow: auto; display: grid; align-content: start; gap: 8px; }
+.qa-session-item { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; text-align: left; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.26); color: var(--text); cursor: pointer; }
+.qa-session-item.active, .qa-session-item:hover { border-color: rgba(184, 137, 46, .45); background: rgba(184, 137, 46, .12); }
+.qa-session-item strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qa-session-item span { color: var(--muted); font-size: 12px; }
+.qa-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.qa-panel-head { padding: 18px 20px; border-bottom: 1px solid var(--line); }
+.qa-panel-head p { margin: 6px 0 0; color: var(--muted); }
+.qa-panel-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: end; }
+.qa-messages { overflow: auto; padding: 20px; display: grid; align-content: start; gap: 14px; }
+.qa-message { max-width: min(760px, 92%); padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.35); }
+.qa-message.from-user { justify-self: end; background: rgba(184, 137, 46, .13); }
+.qa-message.from-assistant { justify-self: start; }
+.qa-message-meta { display: flex; align-items: center; gap: 8px; justify-content: space-between; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.qa-message-content { margin: 0; white-space: pre-wrap; line-height: 1.75; overflow-wrap: anywhere; }
+.qa-message-error { margin: 10px 0 0; color: #c45656; font-size: 13px; }
+.qa-citation-strip { display: grid; gap: 8px; margin-top: 12px; }
+.qa-citation-strip button { display: grid; gap: 4px; text-align: left; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.28); color: var(--text); cursor: pointer; }
+.qa-citation-strip span, .qa-citation-list p { margin: 0; color: var(--muted); font-size: 13px; }
+.qa-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 16px 20px; border-top: 1px solid var(--line); }
+.qa-citation-list { display: grid; gap: 12px; }
+.qa-citation-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.24); }
+.qa-citation-title { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.qa-citation-card blockquote { margin: 12px 0 0; padding-left: 12px; border-left: 3px solid var(--accent); color: var(--text); line-height: 1.7; white-space: pre-wrap; }
+@media (max-width: 980px) { .console-shell, .login-screen, .resource-grid, .qa-workbench { grid-template-columns: 1fr; } .sidebar { position: static; } .topbar, .page-heading, .qa-panel-head { align-items: flex-start; flex-direction: column; } .qa-composer { grid-template-columns: 1fr; } }
