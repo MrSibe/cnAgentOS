@@ -47,6 +47,7 @@ from cnagentos.services.qa_security import (
 
 VALID_SESSION_STATUSES = {"active", "archived"}
 VALID_MESSAGE_STATUSES = {"completed", "streaming", "failed"}
+NO_EVIDENCE_ANSWER = "未找到可用于回答该问题的系统依据。请先在数据仓库中确认已有状态为 available 的相关内容。"
 
 
 class QAEngineService:
@@ -182,7 +183,7 @@ class QAEngineService:
     
     async def get_citations(self, message_id: str) -> list[dict]:
         message = await get_owned_answer_message(self.session, self.actor, message_id)
-        
+
         citations = []
         for citation in message.citations:
             ki = citation.knowledge_item
@@ -195,7 +196,19 @@ class QAEngineService:
                 "excerpt": citation.excerpt,
                 "current_status": ki.status if ki else None,
             })
-        
+
+        await write_qa_audit(
+            self.session,
+            self.actor,
+            "qa.citations.viewed",
+            "qa_message",
+            message.id,
+            "succeeded",
+            {"citations_count": len(citations)},
+            self.ip_address,
+        )
+        await self.session.commit()
+
         citations.sort(key=lambda x: x["rank"])
         return citations
     
@@ -271,7 +284,18 @@ class QAEngineService:
             status="completed",
         )
         self.session.add(user_message)
-        
+
+        await write_qa_audit(
+            self.session,
+            self.actor,
+            "qa.question.submitted",
+            "qa_message",
+            user_message.id,
+            "succeeded",
+            {"session_id": session_id, "question_length": len(question)},
+            self.ip_address,
+        )
+
         answer_message = QaMessage(
             id=str(uuid4()),
             session_id=session_id,
@@ -282,6 +306,47 @@ class QAEngineService:
         )
         self.session.add(answer_message)
         
+        await write_qa_audit(
+            self.session, self.actor, "qa.answer.started", "qa_message",
+            answer_message.id, "succeeded", {"session_id": session_id}, self.ip_address
+        )
+
+        await self.session.flush()
+
+        knowledge_items = await retrieve_available_knowledge(
+            self.session, question
+        )
+        validated_items = validate_retrieved_knowledge_items(knowledge_items)
+
+        if not validated_items:
+            answer_message.content = NO_EVIDENCE_ANSWER
+            answer_message.status = "completed"
+            answer_message.updated_at = utc_now()
+            session.updated_at = utc_now()
+            await write_qa_audit(
+                self.session,
+                self.actor,
+                "qa.answer.completed",
+                "qa_message",
+                answer_message.id,
+                "succeeded",
+                {"citations_count": 0, "strategy": "no_evidence"},
+                self.ip_address,
+            )
+            await self.session.commit()
+
+            async def no_evidence_generate() -> AsyncIterator[str]:
+                yield f"data: {json.dumps({'content': NO_EVIDENCE_ANSWER, 'full_content': NO_EVIDENCE_ANSWER}, ensure_ascii=False)}\n\n"
+                completed_payload = {
+                    "event": "completed",
+                    "message_id": answer_message.id,
+                    "citations": [],
+                }
+                yield f"event: completed\ndata: {json.dumps(completed_payload, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return answer_message, no_evidence_generate()
+
         call_log = ModelCallLog(
             id=str(uuid4()),
             model_config_id=default_model.id,
@@ -292,19 +357,9 @@ class QAEngineService:
             status="running",
             started_at=utc_now(),
         )
+        answer_message.model_call_log_id = call_log.id
         self.session.add(call_log)
-        
-        await write_qa_audit(
-            self.session, self.actor, "qa.answer.started", "qa_message",
-            answer_message.id, "succeeded", {"session_id": session_id}, self.ip_address
-        )
-        
         await self.session.flush()
-        
-        knowledge_items = await retrieve_available_knowledge(
-            self.session, question
-        )
-        validated_items = validate_retrieved_knowledge_items(knowledge_items)
         
         prompt = build_prompt_with_context(question, validated_items)
         
@@ -334,30 +389,28 @@ class QAEngineService:
                 
                 final_content = "".join(accumulated_content)
                 
-                async with self.session.begin():
-                    answer_message = await self.session.get(QaMessage, answer_message.id)
-                    if answer_message:
-                        answer_message.content = final_content
-                        answer_message.status = "completed"
-                        answer_message.updated_at = utc_now()
-                        
-                        call_log = await self.session.get(ModelCallLog, call_log.id)
-                        if call_log:
-                            call_log.status = "succeeded"
-                            call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
-                            call_log.finished_at = utc_now()
-                        
-                        await self._save_citations(answer_message.id, validated_items)
-                        session_obj = await self.session.get(QaSession, session_id)
-                        if session_obj:
-                            session_obj.updated_at = utc_now()
-                        
-                        await self.session.commit()
-                
+                answer_message = await self.session.get(QaMessage, answer_message.id)
+                if answer_message:
+                    answer_message.content = final_content
+                    answer_message.status = "completed"
+                    answer_message.updated_at = utc_now()
+
+                    call_log = await self.session.get(ModelCallLog, call_log.id)
+                    if call_log:
+                        call_log.status = "succeeded"
+                        call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
+                        call_log.finished_at = utc_now()
+
+                    await self._save_citations(answer_message.id, validated_items)
+                    session_obj = await self.session.get(QaSession, session_id)
+                    if session_obj:
+                        session_obj.updated_at = utc_now()
+
                 await write_qa_audit(
                     self.session, self.actor, "qa.answer.completed", "qa_message",
                     answer_message.id, "succeeded", {"citations_count": len(validated_items)}, self.ip_address
                 )
+                await self.session.commit()
                 
                 citations_data = [
                     {
@@ -422,23 +475,21 @@ class QAEngineService:
         error_code: str,
         error_msg: str,
     ) -> None:
-        async with self.session.begin():
-            answer_message = await self.session.get(QaMessage, answer_id)
-            if answer_message:
-                answer_message.status = "failed"
-                answer_message.error_summary = error_msg
-                answer_message.updated_at = utc_now()
-            
-            call_log = await self.session.get(ModelCallLog, call_log_id)
-            if call_log:
-                call_log.status = "failed"
-                call_log.error_code = error_code
-                call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
-                call_log.finished_at = utc_now()
-            
-            await self.session.commit()
-        
+        answer_message = await self.session.get(QaMessage, answer_id)
+        if answer_message:
+            answer_message.status = "failed"
+            answer_message.error_summary = error_msg
+            answer_message.updated_at = utc_now()
+
+        call_log = await self.session.get(ModelCallLog, call_log_id)
+        if call_log:
+            call_log.status = "failed"
+            call_log.error_code = error_code
+            call_log.latency_ms = int((time.monotonic() - start_time) * 1000)
+            call_log.finished_at = utc_now()
+
         await write_qa_audit(
             self.session, self.actor, "qa.answer.failed", "qa_message",
             answer_id, "failed", {"error_code": error_code}, self.ip_address
         )
+        await self.session.commit()

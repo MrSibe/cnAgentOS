@@ -19,6 +19,7 @@
 - 2026-05-29：修改 `SYSTEM_FUNCTIONS` 时每一项必须保持 7 元组格式；重复或旧格式导航项会导致 bootstrap 解包失败并阻断所有依赖初始化的后端测试。
 - 2026-05-29：Phase 3 C 智能问数页面应只调用 `docs/api/question-answering.md` 定义的 `/api/v1/qa/*` 接口，前端不得提交 `knowledge_item_id`、证据 ID 或自选引用范围。
 - 2026-05-29：Phase 3 B/C 实现问数 API 和页面时必须复用 `services/qa_security.py`，通过查询级所有权过滤保护会话/回答/引用，并让他人记录和不存在记录统一返回 `404`。
+- 2026-05-30：Phase 4 A 安全验收确认 QA 流式提问也是变更型 POST，必须校验 CSRF；无可用依据时返回固定空引用回答、不调用模型 provider；流式完成/失败和引用查看审计必须在响应路径提交成功。
 
 ## 追加模板
 

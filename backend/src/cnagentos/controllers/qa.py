@@ -124,6 +124,7 @@ async def ask_question(
     session: DbSession,
     payload: QAQuestionRequest,
     context: QAUser,
+    _: None = Depends(require_csrf),
 ):
     """流式提问并获取回答
     

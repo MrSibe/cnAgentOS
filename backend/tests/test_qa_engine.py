@@ -6,7 +6,9 @@ from uuid import uuid4
 import httpx
 from httpx import AsyncClient
 import pytest
+from sqlalchemy import func, select
 
+from cnagentos.models.entities import AuditLog, KnowledgeItem, ModelCallLog
 from cnagentos.services.model_provider import ModelProviderResponse, ModelProviderUsage
 
 ADMIN_PASSWORD = "Admin-password-123"
@@ -220,6 +222,43 @@ async def create_active_model_for_qa(client, admin_session):
     return model_id
 
 
+async def create_available_knowledge(app, *, title="人工智能发展", content=None):
+    """创建可用于问数检索的知识内容"""
+    async with app.state.sessionmaker() as session:
+        item = KnowledgeItem(
+            id=str(uuid4()),
+            title=title,
+            content=content or "人工智能产业正在快速发展，模型应用和数据治理成为最新重点。",
+            content_hash=uuid4().hex,
+            status="available",
+        )
+        session.add(item)
+        await session.commit()
+        return item.id
+
+
+def parse_completed_event(text: str) -> dict:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line == "event: completed" and index + 1 < len(lines):
+            data_line = lines[index + 1]
+            if data_line.startswith("data: "):
+                return json.loads(data_line.removeprefix("data: "))
+    raise AssertionError(f"completed event not found in SSE body: {text}")
+
+
+async def audit_actions_for(app, target_id: str) -> list[str]:
+    async with app.state.sessionmaker() as session:
+        rows = (
+            await session.scalars(
+                select(AuditLog)
+                .where(AuditLog.target_id == target_id)
+                .order_by(AuditLog.created_at)
+            )
+        ).all()
+        return [row.action for row in rows]
+
+
 # =============================================================================
 # 会话管理测试
 # =============================================================================
@@ -426,6 +465,7 @@ async def test_ask_question_requires_default_model(client, admin_session):
     # 尝试提问应该失败
     ask = await client.post(
         f"/api/v1/qa/sessions/{session_id}/questions/stream",
+        headers={"X-CSRF-Token": qa_csrf},
         json={"question": "测试问题"},
     )
     assert ask.status_code == 422
@@ -436,10 +476,11 @@ async def test_ask_question_requires_default_model(client, admin_session):
 # 流式问答测试
 # =============================================================================
 
-async def test_streaming_qa_success(monkeypatch, client, admin_session):
+async def test_streaming_qa_success(monkeypatch, app, client, admin_session):
     """测试成功的流式问答"""
     reset_fake_qa_provider()
     monkeypatch.setattr("cnagentos.services.qa_engine.ModelProviderClient", FakeQAProviderClient)
+    await create_available_knowledge(app)
     
     model_id = await create_active_model_for_qa(client, admin_session)
     qa_user_id, username = await create_qa_user_with_model_view(client, admin_session)
@@ -455,6 +496,7 @@ async def test_streaming_qa_success(monkeypatch, client, admin_session):
     async with client.stream(
         "POST",
         f"/api/v1/qa/sessions/{session_id}/questions/stream",
+        headers={"X-CSRF-Token": qa_csrf},
         json={"question": "关于人工智能的最新发展是什么？"},
     ) as response:
         body = await response.aread()
@@ -464,6 +506,8 @@ async def test_streaming_qa_success(monkeypatch, client, admin_session):
     # 验证 SSE 流式响应
     assert response.status_code == 200
     assert "event: completed" in text or any("content" in line for line in text.split("\n") if line.startswith("data:"))
+    completed_payload = parse_completed_event(text)
+    assert completed_payload["citations"]
     
     # 验证消息已保存
     messages = await client.get(f"/api/v1/qa/sessions/{session_id}/messages")
@@ -471,7 +515,16 @@ async def test_streaming_qa_success(monkeypatch, client, admin_session):
     msg_data = messages.json()["data"]
     
     # 应该有用户消息和助手回答
-    assert len(msg_data) >= 1  # 至少有一条消息
+    assert len(msg_data) >= 2
+    answer_msg = next(m for m in msg_data if m["role"] == "assistant")
+    assert answer_msg["citations"]
+
+    citations = await client.get(f"/api/v1/qa/messages/{answer_msg['id']}/citations")
+    assert citations.status_code == 200
+    assert citations.json()["data"]
+    actions = await audit_actions_for(app, answer_msg["id"])
+    assert "qa.answer.completed" in actions
+    assert "qa.citations.viewed" in actions
     
     # 验证模型调用日志
     logs = await client.get("/api/v1/admin/model-calls")
@@ -480,11 +533,12 @@ async def test_streaming_qa_success(monkeypatch, client, admin_session):
     assert len(qa_logs) >= 1
 
 
-async def test_streaming_qa_error_handling(monkeypatch, client, admin_session):
+async def test_streaming_qa_error_handling(monkeypatch, app, client, admin_session):
     """测试流式问答错误处理 - 验证错误时数据库状态正确更新"""
     from openai import APIStatusError
     
     reset_fake_qa_provider()
+    await create_available_knowledge(app, title="错误处理资料", content="测试错误处理需要可用依据。")
     FakeQAProviderClient.stream_error = APIStatusError(
         "upstream failed",
         response=httpx.Response(503, request=httpx.Request("POST", "https://api.example.com/v1/chat/completions")),
@@ -506,6 +560,7 @@ async def test_streaming_qa_error_handling(monkeypatch, client, admin_session):
     async with client.stream(
         "POST",
         f"/api/v1/qa/sessions/{session_id}/questions/stream",
+        headers={"X-CSRF-Token": qa_csrf},
         json={"question": "测试错误处理"},
     ) as response:
         body = await response.aread()
@@ -525,6 +580,8 @@ async def test_streaming_qa_error_handling(monkeypatch, client, admin_session):
     assert answer_msg["status"] == "failed", f"期望 status=failed，实际 {answer_msg['status']}"
     assert answer_msg["error_summary"] is not None, "错误摘要应该被记录"
     assert "模型" in answer_msg["error_summary"] or "upstream" in answer_msg["error_summary"].lower()
+    actions = await audit_actions_for(app, answer_msg["id"])
+    assert "qa.answer.failed" in actions
 
 
 async def test_cannot_ask_in_archived_session(client, admin_session):
@@ -550,10 +607,83 @@ async def test_cannot_ask_in_archived_session(client, admin_session):
     # 尝试提问应该失败
     ask = await client.post(
         f"/api/v1/qa/sessions/{session_id}/questions/stream",
+        headers={"X-CSRF-Token": qa_csrf},
         json={"question": "测试"},
     )
     assert ask.status_code == 400
     assert ask.json()["error"]["code"] == "INVALID_STATE"
+
+
+async def test_streaming_question_requires_csrf(client, admin_session):
+    """流式提问也是变更型请求，必须校验 CSRF token"""
+    model_id = await create_active_model_for_qa(client, admin_session)
+    qa_user_id, username = await create_qa_user_with_permission(client, admin_session)
+    qa_csrf = await login_qa_user(client, username, "QA-User-password-123")
+
+    created = await client.post(
+        "/api/v1/qa/sessions",
+        headers={"X-CSRF-Token": qa_csrf},
+        json={"title": "流式 CSRF 测试"},
+    )
+    session_id = created.json()["data"]["id"]
+
+    ask = await client.post(
+        f"/api/v1/qa/sessions/{session_id}/questions/stream",
+        json={"question": "没有 CSRF 的流式请求"},
+    )
+
+    assert ask.status_code == 403
+    assert ask.json()["error"]["code"] == "CSRF_INVALID"
+
+
+async def test_no_evidence_answer_does_not_call_provider(monkeypatch, app, client, admin_session):
+    """无可用依据时返回固定回答、空引用，且不调用模型 provider"""
+    reset_fake_qa_provider()
+    monkeypatch.setattr("cnagentos.services.qa_engine.ModelProviderClient", FakeQAProviderClient)
+
+    model_id = await create_active_model_for_qa(client, admin_session)
+    qa_user_id, username = await create_qa_user_with_permission(client, admin_session)
+    qa_csrf = await login_qa_user(client, username, "QA-User-password-123")
+
+    created = await client.post(
+        "/api/v1/qa/sessions",
+        headers={"X-CSRF-Token": qa_csrf},
+        json={"title": "无依据测试"},
+    )
+    session_id = created.json()["data"]["id"]
+
+    async with client.stream(
+        "POST",
+        f"/api/v1/qa/sessions/{session_id}/questions/stream",
+        headers={"X-CSRF-Token": qa_csrf},
+        json={"question": "一个没有任何可用依据的问题"},
+    ) as response:
+        body = await response.aread()
+
+    text = body.decode()
+    assert response.status_code == 200
+    assert "未找到可用于回答该问题的系统依据" in text
+    assert FakeQAProviderClient.call_args == []
+
+    completed_payload = parse_completed_event(text)
+    assert completed_payload["citations"] == []
+
+    messages = await client.get(f"/api/v1/qa/sessions/{session_id}/messages")
+    answer_msg = next(m for m in messages.json()["data"] if m["role"] == "assistant")
+    assert answer_msg["status"] == "completed"
+    assert answer_msg["citations"] == []
+
+    citations = await client.get(f"/api/v1/qa/messages/{answer_msg['id']}/citations")
+    assert citations.status_code == 200
+    assert citations.json()["data"] == []
+    actions = await audit_actions_for(app, answer_msg["id"])
+    assert "qa.answer.completed" in actions
+    assert "qa.citations.viewed" in actions
+    async with app.state.sessionmaker() as session:
+        qa_call_count = await session.scalar(
+            select(func.count()).select_from(ModelCallLog).where(ModelCallLog.purpose == "qa_answer")
+        )
+    assert qa_call_count == 0
 
 
 # =============================================================================
