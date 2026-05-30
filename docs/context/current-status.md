@@ -69,6 +69,21 @@ Phase 4 进入 MVP 集成验收与交付收口，待完成：
 - QA 审计支持 `succeeded/failed/rejected`，并对 prompt、question、headers、token、secret、URL query 等敏感信息脱敏。
 - 集成测试覆盖自己的会话可访问、他人/不存在会话统一不可见、assistant 回答归属检查、问题校验、非 `available` 依据拒绝和审计脱敏。
 
+## Phase 4 A 实现摘要
+
+**分支**：`feat/phase-4-a-security-acceptance`
+
+**已实现能力**：
+- 补齐 QA 流式提问入口的 CSRF 校验，确保所有变更型浏览器请求均需 `X-CSRF-Token`。
+- 固化无可用依据回答策略：返回固定说明、保存空引用，不调用模型 provider，也不伪造引用。
+- 补齐 QA 审计完整性：问题提交、回答完成、回答失败和引用查看均写入脱敏审计并在流式响应结束后提交。
+- 增加生产发布配置守卫测试，验证生产环境必须显式设置 CSRF secret、加密密钥，并使用 `__Host-cnagentos_session` 与 secure cookie。
+
+**技术细节**：
+- `qa_security.get_owned_answer_message` 预加载引用、知识内容和来源，避免引用查看时异步懒加载越界。
+- `qa_knowledge.RetrievedKnowledge` 保留检索结果的治理状态，供 QA 安全校验复核。
+- 验证命令覆盖后端定向测试、后端全量测试、前端单元测试和前端构建。
+
 ## Phase 3 C 实现摘要
 
 **分支**：`feat/phase3-c-qa-ui`

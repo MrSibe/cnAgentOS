@@ -21,6 +21,7 @@ class RetrievedKnowledge:
     title: str | None
     source_name: str | None
     canonical_url: str | None
+    status: str
     content: str
     excerpt: str
     published_at: datetime | None
@@ -139,6 +140,7 @@ async def retrieve_available_knowledge(
                 title=title,
                 source_name=source_name,
                 canonical_url=item.canonical_url,
+                status=item.status,
                 content=content,
                 excerpt=excerpt,
                 published_at=item.published_at,

@@ -4,9 +4,17 @@ from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from cnagentos.api import ApiError
-from cnagentos.models.entities import AuditLog, KnowledgeItem, QaMessage, QaSession, User
+from cnagentos.models.entities import (
+    AuditLog,
+    KnowledgeItem,
+    QaCitation,
+    QaMessage,
+    QaSession,
+    User,
+)
 from cnagentos.services.collection_security import sanitized_url
 
 
@@ -100,6 +108,11 @@ async def get_owned_answer_message(
 ) -> QaMessage:
     message = await session.scalar(
         select(QaMessage)
+        .options(
+            selectinload(QaMessage.citations)
+            .selectinload(QaCitation.knowledge_item)
+            .selectinload(KnowledgeItem.source)
+        )
         .join(QaSession, QaMessage.session_id == QaSession.id)
         .where(
             QaMessage.id == answer_message_id,
