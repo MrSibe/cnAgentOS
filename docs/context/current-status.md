@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-正式产品处于 **Phase 4（MVP 集成验收与交付）C 端集成验收收口** 阶段。
+正式产品处于 **Phase 4（MVP 集成验收与交付）后端与 C 端集成验收收口** 阶段。
 
 Phase 0 工程底座已落地并调整为单仓前后端分离结构：`backend/` 承载 FastAPI + SQLAlchemy AsyncSession + Alembic + PostgreSQL 后端 API，`frontend/` 承载 Vite Vue TypeScript + Pinia + Vue Router + Element Plus 前端；Docker Compose 继续在根目录提供开发数据库。后端进程只提供 API、健康检查和 OpenAPI 文档，不托管前端页面或构建产物。
 
@@ -35,15 +35,27 @@ Phase 1 A 已完成认证/RBAC/导航/审计后端实现和集成测试。Phase 
 | 模型引擎 | 脱敏配置、默认模型、测试与调用统计 | 已实现并通过集成测试；管理端已对接模型配置、启停、设默认、连接测试、流式测试和调用记录 |
 | 智能瞭望 | 数据源、规则和采集任务 | Phase 2 已实现并通过集成测试；包含 SSRF/规则安全校验、数据源 CRUD、规则 CRUD、采集任务创建/取消/执行和脱敏审计 |
 | 数据仓库 | 标准化入库、去重和内容治理 | Phase 2 已实现并通过集成测试；包含内容入库、SHA-256 去重、列表/详情查询和治理状态更新 |
-| 智能问数 | 检索依据、流式回答与引用 | Phase 3 A/B/C 已实现；进入 Phase 4 集成验收与问题修复 |
+| 智能问数 | 检索依据、流式回答与引用 | Phase 3 A/B/C 已实现；Phase 4 A/B 已补齐安全与后端稳定性验收，进入 MVP 端到端演示收口 |
 | 安全与审计 | 秘密保护、SSRF 防护与高风险动作审计 | Phase 1 覆盖认证/RBAC/CSRF/审计基础和模型凭据加密；Phase 2 覆盖采集 SSRF 校验、规则安全校验和 watch/data 脱敏审计 |
 
 ## 下一里程碑
 
 Phase 4 进入 MVP 集成验收与交付收口，待完成：
 - A：复核权限矩阵、安全边界、审计完整性和发布配置。
-- B：复核迁移初始化、外部依赖失败策略和问数后端稳定性。
+- B：复核迁移初始化、外部依赖失败策略和问数后端稳定性（已完成，待评审）。
 - C：执行 MVP 演示脚本、补齐端到端验证、修复界面/集成问题并汇总评审材料。
+
+## Phase 4 B 实现摘要
+
+**分支**：`feat/phase-4-b-backend-stabilization`
+
+**已实现能力**：
+- 新增 Alembic 迁移验收测试，使用隔离测试库执行 `upgrade head`、初始化系统管理员/reference data、校验 Phase 1-3 权限和导航项，再执行 `downgrade base` 验证回滚链。
+- 补强 QA 流式回答外部依赖失败测试，覆盖上游 HTTP 错误、超时、连接失败和未知 provider 异常，确保回答、`qa_answer` 调用日志和脱敏审计均稳定落库。
+- 修复 QA SSE 客户端提前关闭时的运行态残留：回答消息和模型调用日志会标记为 `failed`，错误码记录为 `CLIENT_DISCONNECTED`。
+
+**验证结果**：
+- `uv run pytest tests/test_qa_engine.py tests/test_migrations.py -q` 通过（20 passed）。
 
 ## Phase 4 C 实现摘要
 

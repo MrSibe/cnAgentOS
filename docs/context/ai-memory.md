@@ -21,6 +21,7 @@
 - 2026-05-29：Phase 3 B/C 实现问数 API 和页面时必须复用 `services/qa_security.py`，通过查询级所有权过滤保护会话/回答/引用，并让他人记录和不存在记录统一返回 `404`。
 - 2026-05-30：Phase 4 A 安全验收确认 QA 流式提问也是变更型 POST，必须校验 CSRF；无可用依据时返回固定空引用回答、不调用模型 provider；流式完成/失败和引用查看审计必须在响应路径提交成功。
 - 2026-05-30：Phase 4 C 验收发现流式问数提问是写操作，后端 `POST /api/v1/qa/sessions/{session_id}/questions/stream` 必须和会话创建/更新一样依赖 `require_csrf`；前端 `postStream` 已会发送 `X-CSRF-Token`。
+- 2026-05-30：Phase 4 B 后端稳定性验收确认 Alembic 必须能从空库 `upgrade head` 并初始化 reference data，QA SSE 外部依赖失败和客户端提前断开都必须把回答、`qa_answer` 调用日志和审计从运行态收敛到失败态。
 
 ## 追加模板
 

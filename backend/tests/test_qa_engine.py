@@ -5,10 +5,13 @@ from uuid import uuid4
 
 import httpx
 from httpx import AsyncClient
+from openai import APIConnectionError, APITimeoutError
 import pytest
 from sqlalchemy import func, select
 
-from cnagentos.models.entities import AuditLog, KnowledgeItem, ModelCallLog
+from cnagentos.models.entities import AuditLog, KnowledgeItem, ModelCallLog, QaMessage, User
+from cnagentos.schemas import QAQuestionRequest
+from cnagentos.services.qa_engine import QAEngineService
 from cnagentos.services.model_provider import ModelProviderResponse, ModelProviderUsage
 
 ADMIN_PASSWORD = "Admin-password-123"
@@ -581,6 +584,139 @@ async def test_streaming_qa_error_handling(monkeypatch, app, client, admin_sessi
     assert answer_msg["error_summary"] is not None, "错误摘要应该被记录"
     assert "模型" in answer_msg["error_summary"] or "upstream" in answer_msg["error_summary"].lower()
     actions = await audit_actions_for(app, answer_msg["id"])
+    assert "qa.answer.failed" in actions
+
+    async with app.state.sessionmaker() as session:
+        call_log = await session.scalar(
+            select(ModelCallLog).where(ModelCallLog.related_id == answer_msg["id"])
+        )
+        assert call_log is not None
+        assert call_log.status == "failed"
+        assert call_log.error_code == "HTTP_503"
+
+
+def openai_request() -> httpx.Request:
+    return httpx.Request("POST", "https://api.example.com/v1/chat/completions")
+
+
+@pytest.mark.parametrize(
+    ("exception_factory", "expected_code", "expected_summary"),
+    [
+        (lambda: APITimeoutError(request=openai_request()), "TIMEOUT", "超时"),
+        (
+            lambda: APIConnectionError(request=openai_request()),
+            "CONNECTION_ERROR",
+            "无法连接",
+        ),
+        (lambda: RuntimeError("provider exploded"), "UPSTREAM_ERROR", "流式响应出错"),
+    ],
+)
+async def test_streaming_qa_external_failures_are_persisted(
+    monkeypatch,
+    app,
+    client,
+    admin_session,
+    exception_factory,
+    expected_code,
+    expected_summary,
+):
+    """模型外部依赖失败必须稳定写入回答、调用日志和审计"""
+    reset_fake_qa_provider()
+    await create_available_knowledge(app, title="外部失败资料", content="人工智能失败策略测试依据。")
+    FakeQAProviderClient.stream_error = exception_factory()
+    monkeypatch.setattr("cnagentos.services.qa_engine.ModelProviderClient", FakeQAProviderClient)
+
+    await create_active_model_for_qa(client, admin_session)
+    _, username = await create_qa_user_with_permission(client, admin_session)
+    qa_csrf = await login_qa_user(client, username, "QA-User-password-123")
+
+    created = await client.post(
+        "/api/v1/qa/sessions",
+        headers={"X-CSRF-Token": qa_csrf},
+        json={"title": "外部依赖失败测试"},
+    )
+    session_id = created.json()["data"]["id"]
+
+    async with client.stream(
+        "POST",
+        f"/api/v1/qa/sessions/{session_id}/questions/stream",
+        headers={"X-CSRF-Token": qa_csrf},
+        json={"question": "人工智能失败策略是什么？"},
+    ) as response:
+        body = await response.aread()
+
+    text = body.decode()
+    assert response.status_code == 200
+    assert "event: error" in text
+    assert expected_code in text
+
+    messages = await client.get(f"/api/v1/qa/sessions/{session_id}/messages")
+    answer_msg = next(m for m in messages.json()["data"] if m["role"] == "assistant")
+    assert answer_msg["status"] == "failed"
+    assert expected_summary in answer_msg["error_summary"]
+
+    async with app.state.sessionmaker() as session:
+        call_log = await session.scalar(
+            select(ModelCallLog).where(ModelCallLog.related_id == answer_msg["id"])
+        )
+        assert call_log is not None
+        assert call_log.status == "failed"
+        assert call_log.error_code == expected_code
+        assert call_log.finished_at is not None
+
+    actions = await audit_actions_for(app, answer_msg["id"])
+    assert "qa.answer.failed" in actions
+
+
+async def test_streaming_qa_client_disconnect_marks_running_records_failed(
+    monkeypatch,
+    app,
+    client,
+    admin_session,
+):
+    """客户端提前关闭 SSE 时，回答和模型调用不得停留在运行态"""
+    reset_fake_qa_provider()
+    monkeypatch.setattr("cnagentos.services.qa_engine.ModelProviderClient", FakeQAProviderClient)
+    await create_available_knowledge(app, title="中断资料", content="人工智能流式中断测试依据。")
+
+    await create_active_model_for_qa(client, admin_session)
+    _, username = await create_qa_user_with_permission(client, admin_session)
+    qa_csrf = await login_qa_user(client, username, "QA-User-password-123")
+
+    created = await client.post(
+        "/api/v1/qa/sessions",
+        headers={"X-CSRF-Token": qa_csrf},
+        json={"title": "流中断测试"},
+    )
+    session_id = created.json()["data"]["id"]
+
+    async with app.state.sessionmaker() as session:
+        actor = await session.scalar(select(User).where(User.username == username))
+        assert actor is not None
+        service = QAEngineService(session, actor)
+        answer, generator = await service.stream_question(
+            session_id,
+            QAQuestionRequest(question="人工智能流式中断如何处理？"),
+        )
+
+        first_chunk = await anext(generator)
+        assert "content" in first_chunk
+        await generator.aclose()
+
+        failed_answer = await session.get(QaMessage, answer.id)
+        assert failed_answer is not None
+        assert failed_answer.status == "failed"
+        assert failed_answer.error_summary == "客户端中断了流式响应"
+
+        call_log = await session.scalar(
+            select(ModelCallLog).where(ModelCallLog.related_id == answer.id)
+        )
+        assert call_log is not None
+        assert call_log.status == "failed"
+        assert call_log.error_code == "CLIENT_DISCONNECTED"
+        assert call_log.finished_at is not None
+
+    actions = await audit_actions_for(app, answer.id)
     assert "qa.answer.failed" in actions
 
 

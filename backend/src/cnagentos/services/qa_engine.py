@@ -3,6 +3,7 @@
 管理会话、消息、引用和模型编排的领域服务。
 """
 
+import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
@@ -369,7 +370,8 @@ class QAEngineService:
         
         async def generate() -> AsyncIterator[str]:
             nonlocal answer_message, call_log
-            
+            stream_finalized = False
+
             try:
                 accumulated_content = []
                 
@@ -411,7 +413,8 @@ class QAEngineService:
                     answer_message.id, "succeeded", {"citations_count": len(validated_items)}, self.ip_address
                 )
                 await self.session.commit()
-                
+                stream_finalized = True
+
                 citations_data = [
                     {
                         "knowledge_item_id": item.knowledge_item_id,
@@ -430,7 +433,15 @@ class QAEngineService:
                 }
                 yield f"event: completed\ndata: {json.dumps(completed_payload, ensure_ascii=False)}\n\n"
                 yield "data: [DONE]\n\n"
-                
+
+            except (asyncio.CancelledError, GeneratorExit):
+                if not stream_finalized:
+                    await self._handle_stream_error(
+                        answer_message.id, call_log.id, start_time,
+                        "CLIENT_DISCONNECTED", "客户端中断了流式响应"
+                    )
+                raise
+
             except APIStatusError as exc:
                 await self._handle_stream_error(
                     answer_message.id, call_log.id, start_time,
