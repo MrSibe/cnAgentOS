@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChatDotRound, Clock, Collection, Cpu, DataAnalysis, Key, Menu, Setting, User } from '@element-plus/icons-vue'
+import { ChatDotRound, ChatDotSquare, Clock, Collection, Cpu, DataAnalysis, Key, Menu, Setting, User } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 
 import type { NavigationItem } from '@/types'
@@ -14,9 +14,11 @@ const icons: Record<string, Component> = {
   settings: Setting,
   cpu: Cpu,
   activity: DataAnalysis,
+  'data-analysis': DataAnalysis,
   history: Clock,
   'file-search': Collection,
   sparkles: ChatDotRound,
+  'chat-dot-square': ChatDotSquare,
 }
 
 function iconFor(name?: string | null): Component {

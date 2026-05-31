@@ -117,3 +117,12 @@ stateDiagram-v2
 - `password_hash`、`credential_ciphertext`、`auth_ciphertext` 为敏感字段，不出现在列表、详情响应、日志或审计详情中。
 - 凭据更新、权限变更、采集规则变更、任务运行和内容状态变化必须产生审计记录。
 - 审计记录原则上只追加，不由普通业务删除；保留周期由部署与合规策略确定。
+
+## 9. 舆情分析
+
+- 分析任务的数据源限定为 `knowledge_items.status=available` 的内容。
+- 聊天数据只有在 `include_chat_data=true` 且来源消息所属会话的成员仍为当前群成员、会话未归档时才纳入分析。
+- 分析报告必须可追溯到其分析任务批次。
+- 模型分析失败时标记任务为 `failed`，保留 `error_message`，不修改已有报告。
+- 分析任务创建和执行必须写入审计日志（动作代码 `sentiment.task.create`、`sentiment.task.run`）。
+- Dashboard 统计仅返回聚合数值，不暴露单个用户或会话内容。

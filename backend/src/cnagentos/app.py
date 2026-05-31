@@ -16,6 +16,7 @@ from cnagentos.controllers.file import router as file_router
 from cnagentos.controllers.admin_chat import router as admin_chat_router
 from cnagentos.controllers.admin_employee import router as admin_employee_router
 from cnagentos.controllers.admin_server import router as admin_server_router
+from cnagentos.controllers.admin_sentiment import router as admin_sentiment_router
 from cnagentos.db import build_engine, build_sessionmaker
 from cnagentos.security import init_cipher
 
@@ -49,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_chat_router)
     app.include_router(admin_employee_router)
     app.include_router(admin_server_router)
+    app.include_router(admin_sentiment_router)
 
     @app.get("/health")
     async def health(request: Request):

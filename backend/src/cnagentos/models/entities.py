@@ -698,3 +698,55 @@ class GroupAnnouncement(Base):
     __table_args__ = (
         Index("ix_group_announcements_conv", "conversation_id", "created_at"),
     )
+
+
+class SentimentTask(Base):
+    """舆情分析任务 (Phase 8)"""
+    __tablename__ = "sentiment_tasks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    task_type: Mapped[str] = mapped_column(String(40), default="full")
+    data_scope: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    include_chat_data: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+    )
+
+    creator: Mapped[User] = relationship()
+    reports: Mapped[list["SentimentReport"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("ix_sentiment_tasks_status", "status", "created_at"),
+        Index("ix_sentiment_tasks_creator", "created_by", "created_at"),
+    )
+
+
+class SentimentReport(Base):
+    """舆情分析报告 (Phase 8)"""
+    __tablename__ = "sentiment_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("sentiment_tasks.id"), index=True)
+    report_type: Mapped[str] = mapped_column(String(40))
+    report_data: Mapped[dict] = mapped_column(JSON)
+    summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_item_count: Mapped[int] = mapped_column(Integer, default=0)
+    period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    task: Mapped[SentimentTask] = relationship(back_populates="reports")
+
+    __table_args__ = (
+        Index("ix_sentiment_reports_task", "task_id", "report_type"),
+    )

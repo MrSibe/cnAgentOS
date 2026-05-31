@@ -40,6 +40,9 @@ const router = createRouter({
         { path: 'servers', component: () => import('@/views/admin/ServerManagementView.vue') },
         { path: 'digital-employees', component: () => import('@/views/admin/DigitalEmployeeView.vue') },
         { path: 'tools', component: () => import('@/views/admin/ToolManagementView.vue') },
+        // Phase 8 admin pages
+        { path: 'dashboard', component: () => import('@/views/admin/DashboardView.vue') },
+        { path: 'sentiment', component: () => import('@/views/admin/SentimentAnalysisView.vue') },
       ],
     },
     { path: '/home', name: 'home', component: EmptyRoute },

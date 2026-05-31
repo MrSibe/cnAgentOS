@@ -368,3 +368,25 @@ class GroupAnnouncementCreate(BaseModel):
 
 class BanMemberRequest(BaseModel):
     user_id: str
+
+
+# =============================================================================
+# Phase 8 — 数智大屏与舆情分析
+# =============================================================================
+
+
+class SentimentTaskCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    task_type: str = Field(default="full", pattern=r"^(full|sentiment|keyword|hotspot)$")
+    data_scope: dict | None = None
+    include_chat_data: bool = False
+
+
+class TrendItem(BaseModel):
+    date: str
+    count: int
+
+
+class KeywordItem(BaseModel):
+    word: str
+    count: int

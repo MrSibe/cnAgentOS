@@ -372,3 +372,63 @@ export interface AdminFileItem {
   uploaded_by_id?: string
   created_at?: string
 }
+
+// ============================================================
+// Phase 8 — 数智大屏与舆情分析
+// ============================================================
+
+export interface DashboardStats {
+  knowledge_items: Record<string, number>
+  watch_sources: Record<string, number>
+  collection_tasks: Record<string, number>
+  qa_sessions: Record<string, number>
+  users: Record<string, number>
+  chat_messages?: Record<string, number>
+  updated_at: string
+}
+
+export interface TrendItem {
+  date: string
+  count: number
+}
+
+export interface TrendData {
+  knowledge_items: TrendItem[]
+  qa_questions: TrendItem[]
+  chat_messages: TrendItem[]
+}
+
+export interface KeywordItem {
+  word: string
+  count: number
+}
+
+export interface SentimentTaskItem {
+  id: string
+  name: string
+  task_type: string
+  status: string
+  progress: number
+  source_item_count?: number
+  error_message?: string | null
+  created_by?: { id: string; display_name: string } | null
+  created_at?: string
+  started_at?: string | null
+  completed_at?: string | null
+}
+
+export interface SentimentReportItem {
+  id: string
+  task_id: string
+  report_type: string
+  report_data: Record<string, unknown>
+  summary_text?: string | null
+  source_item_count: number
+  period_start?: string | null
+  period_end?: string | null
+  created_at?: string
+}
+
+export interface SentimentTaskDetail extends SentimentTaskItem {
+  reports?: SentimentReportItem[]
+}

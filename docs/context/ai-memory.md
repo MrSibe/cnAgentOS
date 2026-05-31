@@ -24,6 +24,10 @@
 - 2026-05-30：Phase 4 B 后端稳定性验收确认 Alembic 必须能从空库 `upgrade head` 并初始化 reference data，QA SSE 外部依赖失败和客户端提前断开都必须把回答、`qa_answer` 调用日志和审计从运行态收敛到失败态。
 - 2026-05-30：模型调用记录列表接口返回模型摘要为嵌套 `model: {id, name}`，前端展示调用记录时应读取 `model.name`；功能导航中父级目录节点的 `route_path` 为空是契约允许行为，真实漏配应表现为无路径且无子项的入口。
 - 2026-05-31：课程团队任务书扩展范围按 `docs/planning/course-assignment-delivery-plan.md` 推进；先完成 Phase 4 MVP 演示收口，再在 Phase 5 定案 SQLite/MySQL 与现有 PostgreSQL 基线的兼容策略，随后建设即时通信、数字员工、智慧舆情、视觉/语音增强、自动化和课程资料交付。
+- 2026-05-31：Phase 8 Dashboard 统计使用 `asyncio.gather` 并行聚合五类数据，任一模块查询失败不会阻塞其他模块，异常以默认值兜底。
+- 2026-05-31：Phase 8 情感分析的 model prompt 按 JSON 格式输出约束，`_save_reports` 中实现 JSON 解析和 markdown 代码块剥离的降级逻辑，解析失败时保存原始文本为 summary 报告。
+- 2026-05-31：Phase 8 前端 Dashboard 使用 `echarts.init` + `ref` 直接挂载（不引入 vue-echarts wrapper），组件卸载时在 `onUnmounted` 中 `dispose` 所有图表实例以避免内存泄漏。
+- 2026-05-31：Phase 8 前端 3D 地球的 scatter3D 数据点使用示例城市坐标展示，可在后续补充真实地理数据。echarts-gl 的地球纹理使用默认内置纹理，无需加载外部图片。
 
 ## 追加模板
 

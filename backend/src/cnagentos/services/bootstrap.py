@@ -107,8 +107,9 @@ SYSTEM_FUNCTIONS = [
     ("admin_files", "文件管理", "admin", "/admin/files", "folder-opened", 60, "files.view"),
     ("admin_employees", "数字员工", "admin", "/admin/digital-employees", "robot", 70, "employee.manage"),
     ("admin_tools", "工具管理", "admin", "/admin/tools", "tools", 80, "tools.manage"),
+    ("admin_dashboard", "数智大屏", "admin", "/admin/dashboard", "data-analysis", 90, "sentiment.view"),
+    ("admin_sentiment", "舆情分析", "admin", "/admin/sentiment", "chat-dot-square", 100, "sentiment.view"),
     # ("admin_automation", "定时任务", "admin", "/admin/scheduled-tasks", "timer", 90, "automation.view"),
-    # ("admin_sentiment", "舆情分析", "admin", "/admin/sentiment", "data-analysis", 100, "sentiment.view"),
 ]
 
 
