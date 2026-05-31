@@ -25,3 +25,12 @@ export function statusType(status?: string | null): 'primary' | 'success' | 'inf
 export function isUserCancelled(error: unknown): boolean {
   return error === 'cancel' || error === 'close'
 }
+
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const k = 1024
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  const size = (bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0)
+  return size + ' ' + units[i]
+}

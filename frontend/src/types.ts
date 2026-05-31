@@ -261,3 +261,114 @@ export interface MessageItem {
   reply_to_id?: string | null
   created_at?: string
 }
+
+// =============================================================================
+// Phase 7 — 数字员工、工具、服务器与群增强
+// =============================================================================
+
+export interface DigitalEmployeeItem {
+  id: string
+  code: string
+  name: string
+  avatar?: string | null
+  description?: string | null
+  system_prompt?: string | null
+  model_config_id?: string | null
+  model_name?: string | null
+  trigger_type: string
+  max_turns: number
+  status: string
+  created_by?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ToolItem {
+  id: string
+  code: string
+  name: string
+  description?: string | null
+  tool_type: string
+  config: Record<string, unknown>
+  config_mask?: string | null
+  invocation_limit: number
+  invocation_window_seconds: number
+  status: string
+  created_by?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ToolInvocationLogItem {
+  id: string
+  tool_name?: string | null
+  employee_name?: string | null
+  caller_name?: string | null
+  status: string
+  error_code?: string | null
+  latency_ms?: number | null
+  created_at?: string
+}
+
+export interface ChatServerItem {
+  id: string
+  name: string
+  base_url: string
+  health_check_url?: string | null
+  auth_mask?: string | null
+  priority: number
+  status: string
+  last_health_check_at?: string | null
+  last_health_check_result?: string | null
+  created_by?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface GroupDetailItem {
+  id: string
+  name?: string | null
+  type: string
+  is_disbanded: boolean
+  member_count: number
+  members: Array<{
+    user_id: string
+    username: string
+    display_name: string
+    role: string
+    banned_at?: string | null
+  }>
+  created_by?: string | null
+  created_by_id?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface GroupAnnouncementItem {
+  id: string
+  conversation_id: string
+  title?: string | null
+  content: string
+  is_pinned: boolean
+  created_by_id?: string
+  created_at?: string
+}
+
+export interface FileStatsItem {
+  total_files: number
+  total_blobs: number
+  total_size_bytes: number
+  saved_bytes: number
+  dedup_ratio: number
+}
+
+export interface AdminFileItem {
+  id: string
+  filename: string
+  mime_type?: string | null
+  size_bytes: number
+  sha256?: string | null
+  uploaded_by?: string | null
+  uploaded_by_id?: string
+  created_at?: string
+}

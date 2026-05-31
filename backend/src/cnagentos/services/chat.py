@@ -597,3 +597,178 @@ class ChatService:
         if member:
             member.last_read_at = ref.created_at
             await self.session.commit()
+
+    # ------------------------------------------------------------------
+    # Phase 7 — Group management (admin)
+    # ------------------------------------------------------------------
+
+    async def list_all_groups(
+        self, page: int = 1, page_size: int = 20, q: str | None = None,
+    ) -> tuple[list[dict], int]:
+        query = select(Conversation).where(Conversation.type == "group")
+        count_query = select(func.count(Conversation.id)).where(
+            Conversation.type == "group",
+        )
+
+        if q:
+            pattern = f"%{q}%"
+            query = query.where(Conversation.name.ilike(pattern))
+            count_query = count_query.where(Conversation.name.ilike(pattern))
+
+        total = (await self.session.scalar(count_query)) or 0
+        rows = (
+            (
+                await self.session.scalars(
+                    query.options(
+                        selectinload(Conversation.creator),
+                        selectinload(Conversation.members),
+                    )
+                    .order_by(Conversation.created_at.desc())
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                )
+            )
+            .all()
+        )
+        results = []
+        for conv in rows:
+            member_count = len(conv.members)
+            results.append({
+                "id": conv.id,
+                "name": conv.name,
+                "member_count": member_count,
+                "is_disbanded": conv.is_disbanded,
+                "created_by": conv.creator.username if conv.creator else None,
+                "created_by_id": conv.created_by,
+                "created_at": conv.created_at.isoformat() if conv.created_at else None,
+                "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+            })
+        return results, total
+
+    async def get_group_detail(self, conversation_id: str) -> dict:
+        conv = await self.session.get(Conversation, conversation_id)
+        if conv is None or conv.type != "group":
+            raise ApiError(404, "NOT_FOUND", "群聊不存在")
+
+        # Eager load members
+        members = (
+            (
+                await self.session.scalars(
+                    select(ConversationMember)
+                    .options(selectinload(ConversationMember.user))
+                    .where(ConversationMember.conversation_id == conversation_id)
+                )
+            )
+            .all()
+        )
+        member_list = [
+            {
+                "user_id": m.user_id,
+                "username": m.user.username if m.user else "",
+                "display_name": m.user.display_name if m.user else "",
+                "role": m.role,
+                "banned_at": m.banned_at.isoformat() if m.banned_at else None,
+            }
+            for m in members
+        ]
+        creator = await self.session.get(User, conv.created_by)
+        return {
+            "id": conv.id,
+            "name": conv.name,
+            "type": conv.type,
+            "is_disbanded": conv.is_disbanded,
+            "member_count": len(members),
+            "members": member_list,
+            "created_by": creator.username if creator else None,
+            "created_by_id": conv.created_by,
+            "created_at": conv.created_at.isoformat() if conv.created_at else None,
+            "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+        }
+
+    async def disband_group(self, conversation_id: str) -> None:
+        conv = await self.session.get(Conversation, conversation_id)
+        if conv is None or conv.type != "group":
+            raise ApiError(404, "NOT_FOUND", "群聊不存在")
+        if conv.is_disbanded:
+            raise ApiError(409, "CONFLICT", "群聊已被解散")
+        conv.is_disbanded = True
+        conv.updated_at = utc_now()
+        await self.session.commit()
+
+    async def ban_member(self, conversation_id: str, user_id: str) -> None:
+        member = await self.session.get(
+            ConversationMember, (conversation_id, user_id),
+        )
+        if member is None:
+            raise ApiError(404, "NOT_FOUND", "该用户不是群成员")
+        member.banned_at = utc_now()
+        member.banned_by = self.actor_id
+        await self.session.commit()
+
+    async def unban_member(self, conversation_id: str, user_id: str) -> None:
+        member = await self.session.get(
+            ConversationMember, (conversation_id, user_id),
+        )
+        if member is None:
+            raise ApiError(404, "NOT_FOUND", "该用户不是群成员")
+        member.banned_at = None
+        member.banned_by = None
+        await self.session.commit()
+
+    # ------------------------------------------------------------------
+    # Phase 7 — Announcements
+    # ------------------------------------------------------------------
+
+    async def create_announcement(
+        self, conversation_id: str, title: str | None, content: str,
+    ) -> dict:
+        conv = await self.session.get(Conversation, conversation_id)
+        if conv is None or conv.type != "group":
+            raise ApiError(404, "NOT_FOUND", "群聊不存在")
+
+        from cnagentos.models.entities import GroupAnnouncement
+        ann = GroupAnnouncement(
+            id=str(uuid4()),
+            conversation_id=conversation_id,
+            title=title,
+            content=content,
+            created_by=self.actor_id,
+        )
+        self.session.add(ann)
+        await self.session.commit()
+        await self.session.refresh(ann)
+
+        return {
+            "id": ann.id,
+            "conversation_id": ann.conversation_id,
+            "title": ann.title,
+            "content": ann.content,
+            "is_pinned": ann.is_pinned,
+            "created_by_id": ann.created_by,
+            "created_at": ann.created_at.isoformat() if ann.created_at else None,
+        }
+
+    async def list_announcements(self, conversation_id: str) -> list[dict]:
+        from cnagentos.models.entities import GroupAnnouncement
+
+        rows = (
+            (
+                await self.session.scalars(
+                    select(GroupAnnouncement)
+                    .where(GroupAnnouncement.conversation_id == conversation_id)
+                    .order_by(GroupAnnouncement.created_at.desc())
+                )
+            )
+            .all()
+        )
+        return [
+            {
+                "id": a.id,
+                "title": a.title,
+                "content": a.content,
+                "is_pinned": a.is_pinned,
+                "created_by_id": a.created_by,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in rows
+        ]

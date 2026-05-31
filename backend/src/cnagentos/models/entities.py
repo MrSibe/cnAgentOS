@@ -453,6 +453,7 @@ class Conversation(Base):
     type: Mapped[str] = mapped_column(String(20))
     name: Mapped[str | None] = mapped_column(String(255))
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    is_disbanded: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now,
@@ -478,10 +479,13 @@ class ConversationMember(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
     role: Mapped[str] = mapped_column(String(20), default="member")
     last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    banned_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     conversation: Mapped[Conversation] = relationship(back_populates="members")
-    user: Mapped[User] = relationship()
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    banner: Mapped[User | None] = relationship(foreign_keys=[banned_by])
 
     __table_args__ = (
         Index("ix_conv_members_conv", "conversation_id"),
@@ -548,3 +552,149 @@ class File(Base):
     uploader: Mapped[User] = relationship()
 
     __table_args__ = (Index("ix_files_uploaded_by", "uploaded_by"),)
+
+
+# =============================================================================
+# Phase 7 — 数字员工、工具、服务器与群增强
+# =============================================================================
+
+
+class DigitalEmployee(Base):
+    __tablename__ = "digital_employees"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    code: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    avatar: Mapped[str | None] = mapped_column(String(512))
+    description: Mapped[str | None] = mapped_column(Text)
+    system_prompt: Mapped[str] = mapped_column(Text)
+    model_config_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_configs.id"), nullable=True,
+    )
+    trigger_type: Mapped[str] = mapped_column(String(20), default="mention")
+    max_turns: Mapped[int] = mapped_column(Integer, default=20)
+    status: Mapped[str] = mapped_column(String(20), default="disabled")
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+    )
+
+    model_config: Mapped[ModelConfig | None] = relationship()
+    creator: Mapped[User | None] = relationship()
+    tool_bindings: Mapped[list["EmployeeToolBinding"]] = relationship(
+        back_populates="employee", cascade="all, delete-orphan",
+    )
+
+
+class Tool(Base):
+    __tablename__ = "tools"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    code: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str | None] = mapped_column(Text)
+    tool_type: Mapped[str] = mapped_column(String(30))
+    config: Mapped[dict] = mapped_column(JSON)
+    config_ciphertext: Mapped[str | None] = mapped_column(Text)
+    config_mask: Mapped[str | None] = mapped_column(String(120))
+    invocation_limit: Mapped[int] = mapped_column(Integer, default=100)
+    invocation_window_seconds: Mapped[int] = mapped_column(Integer, default=3600)
+    status: Mapped[str] = mapped_column(String(20), default="disabled")
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+    )
+
+    creator: Mapped[User | None] = relationship()
+    employee_bindings: Mapped[list["EmployeeToolBinding"]] = relationship(
+        back_populates="tool", cascade="all, delete-orphan",
+    )
+
+
+class EmployeeToolBinding(Base):
+    __tablename__ = "employee_tool_bindings"
+
+    employee_id: Mapped[str] = mapped_column(
+        ForeignKey("digital_employees.id"), primary_key=True,
+    )
+    tool_id: Mapped[str] = mapped_column(
+        ForeignKey("tools.id"), primary_key=True,
+    )
+    binding_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    employee: Mapped[DigitalEmployee] = relationship(back_populates="tool_bindings")
+    tool: Mapped[Tool] = relationship(back_populates="employee_bindings")
+
+
+class ToolInvocationLog(Base):
+    __tablename__ = "tool_invocation_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tool_id: Mapped[str] = mapped_column(ForeignKey("tools.id"), index=True)
+    employee_id: Mapped[str | None] = mapped_column(
+        ForeignKey("digital_employees.id"), nullable=True,
+    )
+    message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.id"), nullable=True)
+    caller_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    input_params: Mapped[dict | None] = mapped_column(JSON)
+    output_summary: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20))
+    error_code: Mapped[str | None] = mapped_column(String(40))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    tool: Mapped[Tool] = relationship()
+    employee: Mapped[DigitalEmployee | None] = relationship()
+    caller: Mapped[User | None] = relationship()
+
+    __table_args__ = (
+        Index("ix_tool_invocation_tool", "tool_id", "created_at"),
+        Index("ix_tool_invocation_employee", "employee_id", "created_at"),
+    )
+
+
+class ChatServer(Base):
+    __tablename__ = "chat_servers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    base_url: Mapped[str] = mapped_column(String(512))
+    health_check_url: Mapped[str | None] = mapped_column(String(512))
+    auth_ciphertext: Mapped[str | None] = mapped_column(Text)
+    auth_mask: Mapped[str | None] = mapped_column(String(120))
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="disabled")
+    last_health_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_health_check_result: Mapped[str | None] = mapped_column(String(20))
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+    )
+
+    creator: Mapped[User | None] = relationship()
+
+
+class GroupAnnouncement(Base):
+    __tablename__ = "group_announcements"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), index=True)
+    title: Mapped[str | None] = mapped_column(String(255))
+    content: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+    )
+
+    conversation: Mapped[Conversation] = relationship()
+    creator: Mapped[User] = relationship()
+
+    __table_args__ = (
+        Index("ix_group_announcements_conv", "conversation_id", "created_at"),
+    )

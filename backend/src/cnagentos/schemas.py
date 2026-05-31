@@ -284,7 +284,7 @@ class ConversationCreate(BaseModel):
 
 class MessageSend(BaseModel):
     conversation_id: str
-    content_type: str = Field(default="text", pattern=r"^(text|system)$")
+    content_type: str = Field(default="text", pattern=r"^(text|system|file|image)$")
     content: str = Field(min_length=1, max_length=5000)
     reply_to_id: str | None = None
 
@@ -292,3 +292,79 @@ class MessageSend(BaseModel):
 class MarkReadRequest(BaseModel):
     conversation_id: str
     last_read_message_id: str
+
+
+# =============================================================================
+# Phase 7 — 数字员工、工具、服务器与群增强
+# =============================================================================
+
+
+class DigitalEmployeeCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=60)
+    name: str = Field(min_length=1, max_length=120)
+    avatar: str | None = Field(default=None, max_length=512)
+    description: str | None = None
+    system_prompt: str = Field(min_length=1)
+    model_config_id: str | None = None
+    trigger_type: str = Field(default="mention", pattern=r"^(mention|direct_chat)$")
+    max_turns: int = Field(default=20, ge=1, le=100)
+
+
+class DigitalEmployeeUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    avatar: str | None = None
+    description: str | None = None
+    system_prompt: str | None = None
+    model_config_id: str | None = None
+    trigger_type: str | None = Field(default=None, pattern=r"^(mention|direct_chat)$")
+    max_turns: int | None = Field(default=None, ge=1, le=100)
+
+
+class ToolCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=60)
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = None
+    tool_type: str = Field(pattern=r"^(api_call|builtin_function|web_search)$")
+    config: dict = Field(min_length=1)
+    sensitive_config: str | None = None
+    invocation_limit: int = Field(default=100, ge=1)
+    invocation_window_seconds: int = Field(default=3600, ge=1)
+
+
+class ToolUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+    config: dict | None = None
+    sensitive_config: str | None = None
+    invocation_limit: int | None = Field(default=None, ge=1)
+    invocation_window_seconds: int | None = Field(default=None, ge=1)
+
+
+class ToolBindRequest(BaseModel):
+    tool_id: str
+    binding_config: dict | None = None
+
+
+class ChatServerCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    base_url: str = Field(min_length=1, max_length=512)
+    health_check_url: str | None = Field(default=None, max_length=512)
+    auth_token: str | None = None
+    priority: int = Field(default=0)
+
+
+class ChatServerUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    base_url: str | None = Field(default=None, min_length=1, max_length=512)
+    health_check_url: str | None = None
+    auth_token: str | None = None
+    priority: int | None = None
+
+
+class GroupAnnouncementCreate(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    content: str = Field(min_length=1)
+
+
+class BanMemberRequest(BaseModel):
+    user_id: str

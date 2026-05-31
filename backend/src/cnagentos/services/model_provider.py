@@ -36,10 +36,18 @@ class ModelProviderClient:
         )
 
     async def complete_chat(self, model_name: str, message: str) -> ModelProviderResponse:
+        return await self.complete_chat_with_messages(
+            model_name, [{"role": "user", "content": message}],
+        )
+
+    async def complete_chat_with_messages(
+        self, model_name: str, messages: list[dict],
+    ) -> ModelProviderResponse:
+        """Complete a chat with a full messages list (system, user, assistant)."""
         try:
             response = await self.client.chat.completions.create(
                 model=model_name,
-                messages=[{"role": "user", "content": message}],
+                messages=messages,
                 stream=False,
             )
         finally:

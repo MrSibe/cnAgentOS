@@ -34,6 +34,12 @@ const router = createRouter({
         { path: 'collection-tasks', component: () => import('@/views/admin/CollectionTasksView.vue') },
         { path: 'knowledge-items', component: () => import('@/views/admin/KnowledgeItemsView.vue') },
         { path: 'audit-logs', component: () => import('@/views/admin/AuditLogsView.vue') },
+        // Phase 7 admin pages
+        { path: 'chat-groups', component: () => import('@/views/admin/GroupManagementView.vue') },
+        { path: 'files', component: () => import('@/views/admin/FileManagementView.vue') },
+        { path: 'servers', component: () => import('@/views/admin/ServerManagementView.vue') },
+        { path: 'digital-employees', component: () => import('@/views/admin/DigitalEmployeeView.vue') },
+        { path: 'tools', component: () => import('@/views/admin/ToolManagementView.vue') },
       ],
     },
     { path: '/home', name: 'home', component: EmptyRoute },

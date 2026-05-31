@@ -20,6 +20,7 @@ from cnagentos.schemas import (
     MessageSend,
 )
 from cnagentos.services.chat import ChatService
+from cnagentos.services.employee import DigitalEmployeeService
 
 router = APIRouter(prefix="/api/v1/chat", tags=["聊天"])
 
@@ -221,3 +222,27 @@ async def mark_read(
     svc = service_for(request, session, context)
     await svc.mark_read(payload.conversation_id, payload.last_read_message_id)
     return success_response(request, None)
+
+
+# =============================================================================
+# Phase 7 — Digital employees (user-side)
+# =============================================================================
+
+EmployeeChatter = Annotated[CurrentContext, Depends(require_permission("employee.chat"))]
+
+
+def employee_service(request: Request, session: DbSession, context: CurrentContext) -> DigitalEmployeeService:
+    return DigitalEmployeeService(
+        session, context.user, request.client.host if request.client else None,
+    )
+
+
+@router.get("/employees")
+async def list_active_employees(
+    request: Request,
+    session: DbSession,
+    context: EmployeeChatter,
+):
+    """List active digital employees available for @mention."""
+    svc = employee_service(request, session, context)
+    return success_response(request, await svc.list_active_employees())

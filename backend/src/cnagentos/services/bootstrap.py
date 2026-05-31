@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from cnagentos.api import ApiError
 from cnagentos.models.entities import Function, Permission, Role, RolePermission, User, UserRole
 from cnagentos.security import hash_password
+from cnagentos.services.seed_employees import seed_phase7_default_data
 
 
 SYSTEM_ROLE_CODE = "system_admin"
@@ -101,10 +102,11 @@ SYSTEM_FUNCTIONS = [
     ("qa", "智能问数", None, "/qa", "sparkles", 40, "qa.use"),
     # Phase 6-9 extension navigation entries (added in Phase 5 as reference;
     # actual activation happens in their respective phases):
-    # ("admin_chat_groups", "群管理", "admin", "/admin/chat-groups", "chat-dot-square", 50, "chat.groups.manage"),
-    # ("admin_files", "文件管理", "admin", "/admin/files", "folder-opened", 60, "files.view"),
-    # ("admin_employees", "数字员工", "admin", "/admin/digital-employees", "robot", 70, "employee.manage"),
-    # ("admin_tools", "工具管理", "admin", "/admin/tools", "tools", 80, "tools.manage"),
+    ("admin_chat_groups", "群管理", "admin", "/admin/chat-groups", "chat-dot-square", 50, "chat.groups.manage"),
+    ("admin_chat_servers", "服务器管理", "admin", "/admin/servers", "connection", 55, "tools.manage"),
+    ("admin_files", "文件管理", "admin", "/admin/files", "folder-opened", 60, "files.view"),
+    ("admin_employees", "数字员工", "admin", "/admin/digital-employees", "robot", 70, "employee.manage"),
+    ("admin_tools", "工具管理", "admin", "/admin/tools", "tools", 80, "tools.manage"),
     # ("admin_automation", "定时任务", "admin", "/admin/scheduled-tasks", "timer", 90, "automation.view"),
     # ("admin_sentiment", "舆情分析", "admin", "/admin/sentiment", "data-analysis", 100, "sentiment.view"),
 ]
@@ -158,12 +160,14 @@ async def initialize_reference_data(session: AsyncSession) -> Role:
         session.add(default_role)
         await session.flush()
 
-    # Grant Phase 6 chat permissions to default_user role (self-registered users)
+    # Grant Phase 6-7 chat permissions to default_user role (self-registered users)
     default_chat_perms = [
         "chat.contacts.view",
         "chat.friends.request",
         "chat.groups.create",
         "chat.messages.send",
+        "chat.files.upload",
+        "employee.chat",
     ]
     for code in default_chat_perms:
         perm = permissions.get(code)
@@ -191,6 +195,10 @@ async def initialize_reference_data(session: AsyncSession) -> Role:
             session.add(function)
             await session.flush()
         function_ids[code] = function.id
+
+    # Seed Phase 7 default data (digital employees, built-in tools)
+    await seed_phase7_default_data(session)
+
     return system_role
 
 
