@@ -58,6 +58,17 @@ async function openDetail(task: CollectionTaskItem): Promise<void> {
   }
 }
 
+async function executeTask(task: CollectionTaskItem): Promise<void> {
+  try {
+    await ElMessageBox.confirm(`确认执行采集任务 ${task.id}？`, '执行任务', { type: 'info' })
+    await post<void>(`/api/v1/admin/collection-tasks/${task.id}/execute`)
+    ElMessage.success('任务已开始执行')
+    await load()
+  } catch (error) {
+    if (!isUserCancelled(error)) ElMessage.error(errorMessage(error))
+  }
+}
+
 async function cancelTask(task: CollectionTaskItem): Promise<void> {
   try {
     await ElMessageBox.confirm(`确认取消采集任务 ${task.id}？`, '取消任务', { type: 'warning' })
@@ -112,8 +123,9 @@ onMounted(load)
       <el-table-column prop="item_failure_count" label="失败数量" width="105" />
       <el-table-column label="创建时间" min-width="170"><template #default="{ row }">{{ shortTime(row.created_at) }}</template></el-table-column>
       <el-table-column label="完成时间" min-width="170"><template #default="{ row }">{{ shortTime(row.finished_at) }}</template></el-table-column>
-      <el-table-column label="操作" fixed="right" width="140">
+      <el-table-column label="操作" fixed="right" width="200">
         <template #default="{ row }">
+          <el-button link type="primary" :disabled="row.status !== 'pending'" @click="executeTask(row)">执行</el-button>
           <el-button link type="primary" @click="openDetail(row)">详情</el-button>
           <el-button link type="danger" :disabled="!['pending', 'running'].includes(row.status)" @click="cancelTask(row)">取消</el-button>
         </template>

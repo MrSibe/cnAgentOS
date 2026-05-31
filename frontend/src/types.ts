@@ -88,7 +88,10 @@ export interface ModelItem {
 
 export interface ModelCallItem {
   id: string
-  model_name: string
+  model?: {
+    id: string
+    name: string
+  } | null
   purpose: string
   streamed: boolean
   status: string

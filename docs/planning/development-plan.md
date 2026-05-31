@@ -147,3 +147,7 @@ flowchart LR
 - 每个 Phase 开始前确认负责人、分支名称、接口/数据契约是否冻结及本阶段验收项。
 - 工作包合并或阻塞后及时更新 `docs/context/current-status.md` 和 `docs/context/issues.md`。
 - 范围、顺序或关键依赖改变时，更新本计划并在 `docs/context/decisions.md` 记录原因。
+
+## 11. Phase 4 之后的课程任务扩展
+
+课程团队任务书要求在 MVP 闭环之后继续交付即时通讯、数字员工、智慧舆情、视觉/语音增强、自动化和 SQLite/MySQL 多数据库能力。后续 Phase 5-10 的执行顺序、三人并行责任流和评分覆盖矩阵维护在 `docs/planning/course-assignment-delivery-plan.md`。

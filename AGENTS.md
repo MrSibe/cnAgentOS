@@ -21,11 +21,12 @@ cnAgentOS 是 AI 智能瞭望与智能问数系统。首版要跑通：
 1. `docs/product/requirements.md`
 2. `docs/product/mvp.md`
 3. `docs/planning/development-plan.md`
-4. `docs/context/current-status.md`
-5. `docs/context/decisions.md`
-6. 与任务相关的 `docs/architecture/`、`docs/database/` 和 `docs/api/` 文档
-7. `docs/workflow/development.md`
-8. `docs/workflow/git.md`
+4. 若任务属于课程任务书扩展范围，阅读 `docs/planning/course-assignment-delivery-plan.md`
+5. `docs/context/current-status.md`
+6. `docs/context/decisions.md`
+7. 与任务相关的 `docs/architecture/`、`docs/database/` 和 `docs/api/` 文档
+8. `docs/workflow/development.md`
+9. `docs/workflow/git.md`
 
 ## 实现约束
 

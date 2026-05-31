@@ -1,6 +1,6 @@
 # 当前状态
 
-**更新时间**：2026-05-30
+**更新时间**：2026-05-31
 
 ## 当前阶段
 
@@ -45,6 +45,12 @@ Phase 4 进入 MVP 集成验收与交付收口，待完成：
 - B：复核迁移初始化、外部依赖失败策略和问数后端稳定性（已完成，待评审）。
 - C：执行 MVP 演示脚本、补齐端到端验证、修复界面/集成问题并汇总评审材料。
 
+## 团队任务书后续范围
+
+课程团队任务书要求在现有 MVP 之后继续交付即时通讯、数字员工、智慧舆情、视觉/语音增强、自动化、SQLite/MySQL 多数据库支持以及最终汇报资料。后续执行顺序、三人并行责任流、阶段门槛和评分覆盖矩阵维护在 `docs/planning/course-assignment-delivery-plan.md`。
+
+当前仍先完成 Phase 4 MVP 演示收口。Phase 5 开始前必须优先确认 SQLite/MySQL 与现有 PostgreSQL 基线的兼容策略，再批量新增聊天、数字员工和舆情数据表。
+
 ## Phase 4 B 实现摘要
 
 **分支**：`feat/phase-4-b-backend-stabilization`
@@ -64,6 +70,7 @@ Phase 4 进入 MVP 集成验收与交付收口，待完成：
 **当前收口点**：
 - 发现并修复流式问数提问接口缺少服务端 CSRF 依赖的问题；前端原本已通过 `postStream` 发送 `X-CSRF-Token`，后端现同步强制校验。
 - 补充 QA 集成测试，确保 `POST /api/v1/qa/sessions/{session_id}/questions/stream` 无 CSRF token 时返回 `403`，已有正常提问、模型不可用和归档会话测试改为显式携带 CSRF token。
+- 修复管理端集成显示问题：调用记录页面按后端返回的嵌套 `model.name` 展示模型名称；功能导航管理页区分目录、页面与未配置入口，避免目录节点空路径被误判为落库缺失。
 - 继续以 `docs/product/mvp.md` 的四条用户旅程作为 Phase 4 C 验收基线。
 
 ## Phase 3 A 实现摘要

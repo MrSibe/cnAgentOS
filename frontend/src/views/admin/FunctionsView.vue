@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
 import { get, patch, post, remove } from '@/api/client'
 import AdminPageHeader from '@/components/AdminPageHeader.vue'
@@ -17,9 +17,33 @@ const permissions = ref<PermissionItem[]>([])
 const createVisible = ref(false)
 const editVisible = ref(false)
 const selected = ref<FunctionItem | null>(null)
-const emptyForm = () => ({ code: '', name: '', parent_id: null as string | null, route_path: '', icon: 'circle', required_permission_code: null as string | null, sort_order: 100 })
+const emptyForm = () => ({
+  code: '',
+  name: '',
+  parent_id: null as string | null,
+  route_path: '',
+  icon: 'circle',
+  required_permission_code: null as string | null,
+  sort_order: 100,
+})
 const createForm = reactive(emptyForm())
-const editForm = reactive({ name: '', parent_id: null as string | null, route_path: '', icon: '', required_permission_code: null as string | null, sort_order: 0, status: 'active' })
+const editForm = reactive({
+  name: '',
+  parent_id: null as string | null,
+  route_path: '',
+  icon: '',
+  required_permission_code: null as string | null,
+  sort_order: 0,
+  status: 'active',
+})
+const functionNameById = computed(() => new Map(functions.value.map((item) => [item.id, item.name])))
+const childCountByParentId = computed(() => {
+  const counts = new Map<string, number>()
+  for (const item of functions.value) {
+    if (item.parent_id) counts.set(item.parent_id, (counts.get(item.parent_id) ?? 0) + 1)
+  }
+  return counts
+})
 
 async function load(): Promise<void> {
   loading.value = true
@@ -37,6 +61,19 @@ async function load(): Promise<void> {
 
 function payload(form: typeof createForm | typeof editForm): Record<string, unknown> {
   return { ...form, route_path: form.route_path || null, icon: form.icon || null }
+}
+
+function parentLabel(item: FunctionItem): string {
+  return item.parent_id ? (functionNameById.value.get(item.parent_id) ?? '-') : '-'
+}
+
+function isDirectoryFunction(item: FunctionItem): boolean {
+  return !item.route_path && (childCountByParentId.value.get(item.id) ?? 0) > 0
+}
+
+function functionKind(item: FunctionItem): 'directory' | 'page' | 'unconfigured' {
+  if (isDirectoryFunction(item)) return 'directory'
+  return item.route_path ? 'page' : 'unconfigured'
 }
 
 async function refreshAfterChange(): Promise<void> {
@@ -121,8 +158,28 @@ onMounted(load)
     <el-table v-loading="loading" :data="functions">
       <el-table-column prop="code" label="功能代码" min-width="150" />
       <el-table-column prop="name" label="名称" min-width="130" />
-      <el-table-column prop="route_path" label="页面路径" min-width="175" />
-      <el-table-column prop="required_permission_code" label="所需权限" min-width="180" />
+      <el-table-column label="父级" min-width="120">
+        <template #default="{ row }">{{ parentLabel(row) }}</template>
+      </el-table-column>
+      <el-table-column label="类型" width="88">
+        <template #default="{ row }">
+          <el-tag v-if="functionKind(row) === 'directory'" type="info">目录</el-tag>
+          <el-tag v-else-if="functionKind(row) === 'page'" type="success">页面</el-tag>
+          <el-tag v-else type="warning">未配置</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="页面路径" min-width="175">
+        <template #default="{ row }">
+          <span v-if="row.route_path">{{ row.route_path }}</span>
+          <span v-else class="muted-cell">-</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="所需权限" min-width="180">
+        <template #default="{ row }">
+          <span v-if="row.required_permission_code">{{ row.required_permission_code }}</span>
+          <span v-else class="muted-cell">-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="105"><template #default="{ row }"><status-tag :value="row.status" /></template></el-table-column>
       <el-table-column prop="sort_order" label="排序" width="72" />
       <el-table-column label="操作" fixed="right" width="190">
@@ -156,3 +213,9 @@ onMounted(load)
     <template #footer><el-button @click="editVisible = false">取消</el-button><el-button type="primary" :loading="submitting" @click="saveEdit">保存</el-button></template>
   </el-dialog>
 </template>
+
+<style scoped>
+.muted-cell {
+  color: var(--muted);
+}
+</style>

@@ -35,7 +35,9 @@ onMounted(load)
   <el-alert v-if="errorText" :title="errorText" type="warning" show-icon :closable="false" />
   <el-card class="resource-card" shadow="never">
     <el-table v-loading="loading" :data="items">
-      <el-table-column prop="model_name" label="模型" min-width="160" />
+      <el-table-column label="模型" min-width="160">
+        <template #default="{ row }">{{ row.model?.name ?? '-' }}</template>
+      </el-table-column>
       <el-table-column prop="purpose" label="用途" min-width="140" />
       <el-table-column label="流式" width="90"><template #default="{ row }"><el-tag :type="row.streamed ? 'success' : 'info'" effect="plain">{{ row.streamed ? 'SSE' : '普通' }}</el-tag></template></el-table-column>
       <el-table-column label="状态" width="110"><template #default="{ row }"><status-tag :value="row.status" /></template></el-table-column>

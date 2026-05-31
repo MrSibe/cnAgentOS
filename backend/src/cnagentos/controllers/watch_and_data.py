@@ -273,11 +273,10 @@ async def run_task(
     await session.commit()
 
     import asyncio
-    from cnagentos.app import app as fastapi_app
-    sessionmaker = fastapi_app.state.sessionmaker
-    task = asyncio.create_task(_execute_task_background(task_id, sessionmaker))
-    _background_tasks.append(task)
-    task.add_done_callback(lambda t: _background_tasks.remove(t) if t in _background_tasks else None)
+    sessionmaker = request.app.state.sessionmaker
+    bg_task = asyncio.create_task(_execute_task_background(task_id, sessionmaker))
+    _background_tasks.append(bg_task)
+    bg_task.add_done_callback(lambda t: _background_tasks.remove(t) if t in _background_tasks else None)
 
     return success_response(request, {"id": task_id, "status": task.status})
 

@@ -117,7 +117,26 @@
 
 查询参数：`page`、`page_size`、`model_id`、`purpose`、`status`、`started_from`、`started_to`。
 
-返回调用时间、用途、状态、耗时和 token 统计；不返回请求原文、回答正文或秘密配置。
+列表项响应字段：
+
+```json
+{
+  "id":"uuid",
+  "model":{"id":"uuid","name":"主模型"},
+  "purpose":"connection_test",
+  "streamed":true,
+  "status":"succeeded",
+  "prompt_tokens":10,
+  "completion_tokens":4,
+  "total_tokens":14,
+  "latency_ms":320,
+  "error_code":null,
+  "started_at":"2026-05-27T00:00:00Z",
+  "finished_at":"2026-05-27T00:00:01Z"
+}
+```
+
+规则：返回调用时间、用途、状态、耗时、关联模型摘要和 token 统计；不返回请求原文、回答正文或秘密配置。
 
 ### `GET /api/v1/admin/model-calls/summary`
 

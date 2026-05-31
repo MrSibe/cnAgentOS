@@ -22,6 +22,8 @@
 - 2026-05-30：Phase 4 A 安全验收确认 QA 流式提问也是变更型 POST，必须校验 CSRF；无可用依据时返回固定空引用回答、不调用模型 provider；流式完成/失败和引用查看审计必须在响应路径提交成功。
 - 2026-05-30：Phase 4 C 验收发现流式问数提问是写操作，后端 `POST /api/v1/qa/sessions/{session_id}/questions/stream` 必须和会话创建/更新一样依赖 `require_csrf`；前端 `postStream` 已会发送 `X-CSRF-Token`。
 - 2026-05-30：Phase 4 B 后端稳定性验收确认 Alembic 必须能从空库 `upgrade head` 并初始化 reference data，QA SSE 外部依赖失败和客户端提前断开都必须把回答、`qa_answer` 调用日志和审计从运行态收敛到失败态。
+- 2026-05-30：模型调用记录列表接口返回模型摘要为嵌套 `model: {id, name}`，前端展示调用记录时应读取 `model.name`；功能导航中父级目录节点的 `route_path` 为空是契约允许行为，真实漏配应表现为无路径且无子项的入口。
+- 2026-05-31：课程团队任务书扩展范围按 `docs/planning/course-assignment-delivery-plan.md` 推进；先完成 Phase 4 MVP 演示收口，再在 Phase 5 定案 SQLite/MySQL 与现有 PostgreSQL 基线的兼容策略，随后建设即时通信、数字员工、智慧舆情、视觉/语音增强、自动化和课程资料交付。
 
 ## 追加模板
 

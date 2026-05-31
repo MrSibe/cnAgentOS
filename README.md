@@ -102,10 +102,11 @@ pnpm --dir frontend dev
 | 开发工作流 | [docs/workflow/development.md](docs/workflow/development.md) |
 | Git 与评审流程 | [docs/workflow/git.md](docs/workflow/git.md) |
 | 三人开发计划 | [docs/planning/development-plan.md](docs/planning/development-plan.md) |
+| 团队任务书后续开发计划 | [docs/planning/course-assignment-delivery-plan.md](docs/planning/course-assignment-delivery-plan.md) |
 
 ## 开发状态
 
-正式版本目前已完成 Phase 3 智能问数闭环，进入 Phase 4 MVP 集成验收与交付收口。开始实现任何首版功能前，应先阅读需求、MVP 验收边界、开发计划、架构、数据库和对应 API 文档；实现完成后，应同步更新动态上下文文档。
+正式版本目前已完成 Phase 3 智能问数闭环，进入 Phase 4 MVP 集成验收与交付收口。课程任务书要求的即时通讯、数字员工、智慧舆情、视觉/语音增强和多数据库能力按 [docs/planning/course-assignment-delivery-plan.md](docs/planning/course-assignment-delivery-plan.md) 在 Phase 5-10 推进。开始实现任何功能前，应先阅读需求、验收边界、对应开发计划、架构、数据库和 API 文档；实现完成后，应同步更新动态上下文文档。
 
 正式变更采用约定式提交，必须通过工作分支交付并由项目负责人 Code Review 后合并；不得直接向主分支提交变更。
 
