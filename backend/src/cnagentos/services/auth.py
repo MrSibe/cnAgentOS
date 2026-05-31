@@ -1,5 +1,6 @@
+from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -8,13 +9,18 @@ from sqlalchemy.orm import joinedload
 
 from cnagentos.api import ApiError
 from cnagentos.config import Settings
-from cnagentos.models.entities import AuthSession, Permission, Role, RolePermission, User, UserRole, utc_now
-from cnagentos.security import (
-    csrf_token_for_session,
-    hash_token,
-    new_session_token,
-    verify_password_async,
+from cnagentos.models.entities import (
+    AuditLog,
+    AuthSession,
+    Permission,
+    Role,
+    RolePermission,
+    User,
+    UserRole,
+    utc_now,
 )
+from cnagentos.security import csrf_token_for_session, hash_password, hash_token, new_session_token, verify_password_async
+from cnagentos.services.bootstrap import DEFAULT_USER_ROLE_CODE
 
 
 @dataclass
@@ -119,3 +125,89 @@ async def revoke_user_sessions(session: AsyncSession, user_id: str) -> None:
     now = utc_now()
     for auth_session in active_sessions:
         auth_session.revoked_at = now
+
+
+# =============================================================================
+# Registration (Phase 6)
+# =============================================================================
+
+
+class RegisterRateLimiter:
+    """In-memory sliding window rate limiter for user registration.
+
+    Allows up to ``max_attempts`` registrations per IP within a
+    ``window_seconds`` period.  Intended as a light deterrent, not a
+    production-grade DoS defence.
+    """
+
+    def __init__(self, max_attempts: int = 3, window_seconds: int = 3600) -> None:
+        self._buckets: dict[str, deque[datetime]] = defaultdict(deque)
+        self.max_attempts = max_attempts
+        self.window_seconds = window_seconds
+
+    def check(self, ip_address: str) -> bool:
+        now = datetime.utcnow()
+        bucket = self._buckets[ip_address]
+        cutoff = now - timedelta(seconds=self.window_seconds)
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= self.max_attempts:
+            return False
+        bucket.append(now)
+        return True
+
+
+_register_limiter = RegisterRateLimiter()
+
+
+async def register_user(
+    session: AsyncSession,
+    settings: Settings,
+    ip_address: str,
+    username: str,
+    display_name: str,
+    password: str,
+) -> dict:
+    """Create a new self-registered user and assign the default_user role.
+
+    Raises ``ApiError`` for rate-limit, duplicate username, or validation
+    failures.
+    """
+    if not _register_limiter.check(ip_address):
+        raise ApiError(429, "RATE_LIMITED", "注册过于频繁，请稍后再试")
+
+    existing = await session.scalar(select(User).where(User.username == username))
+    if existing:
+        raise ApiError(409, "CONFLICT", "用户名已存在")
+
+    user = User(
+        id=str(uuid4()),
+        username=username,
+        display_name=display_name,
+        password_hash=hash_password(password),
+        status="active",
+        is_system_admin=False,
+    )
+    session.add(user)
+    await session.flush()
+
+    default_role = await session.scalar(
+        select(Role).where(Role.code == DEFAULT_USER_ROLE_CODE)
+    )
+    if default_role:
+        session.add(UserRole(user_id=user.id, role_id=default_role.id))
+
+    session.add(
+        AuditLog(
+            id=str(uuid4()),
+            actor_user_id=user.id,
+            action="user.registered",
+            target_type="user",
+            target_id=user.id,
+            result="succeeded",
+            ip_address=ip_address,
+        )
+    )
+    await session.commit()
+
+    return {"id": user.id, "username": user.username, "display_name": user.display_name}

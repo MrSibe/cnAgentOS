@@ -205,3 +205,59 @@ export interface QaMessageItem {
   created_at?: string
   updated_at?: string
 }
+
+// =============================================================================
+// Chat (Phase 6)
+// =============================================================================
+
+export interface ContactItem {
+  user_id: string
+  username: string
+  display_name: string
+  remark?: string | null
+  status: string
+  created_at?: string
+}
+
+export interface FriendRequestItem {
+  id: string
+  from_user_id: string
+  from_user_name: string
+  to_user_id: string
+  to_user_name: string
+  status: string
+  message?: string | null
+  created_at?: string
+}
+
+export interface ConversationItem {
+  id: string
+  type: 'private' | 'group'
+  name?: string | null
+  unread_count: number
+  last_message?: {
+    content: string
+    sender_name: string
+    created_at: string
+  } | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ConversationMemberItem {
+  user_id: string
+  username: string
+  display_name: string
+  role: string
+}
+
+export interface MessageItem {
+  id: string
+  conversation_id: string
+  sender_id: string
+  sender_name: string
+  content_type: string
+  content: string
+  reply_to_id?: string | null
+  created_at?: string
+}

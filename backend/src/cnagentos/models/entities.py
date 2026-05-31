@@ -399,3 +399,152 @@ class QaCitation(Base):
 
     answer_message: Mapped[QaMessage] = relationship(back_populates="citations")
     knowledge_item: Mapped[KnowledgeItem] = relationship()
+
+
+# =============================================================================
+# Phase 6 — 即时通信
+# =============================================================================
+
+
+class Contact(Base):
+    __tablename__ = "contacts"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    contact_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    remark: Mapped[str | None] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    contact: Mapped[User] = relationship(foreign_keys=[contact_id])
+
+    __table_args__ = (
+        Index("ix_contacts_user_id", "user_id"),
+        Index("ix_contacts_contact_id", "contact_id"),
+    )
+
+
+class FriendRequest(Base):
+    __tablename__ = "friend_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    from_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    to_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    message: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+    )
+
+    from_user: Mapped[User] = relationship(foreign_keys=[from_user_id])
+    to_user: Mapped[User] = relationship(foreign_keys=[to_user_id])
+
+    __table_args__ = (
+        Index("ix_friend_requests_from", "from_user_id", "status"),
+        Index("ix_friend_requests_to", "to_user_id", "status"),
+    )
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    type: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str | None] = mapped_column(String(255))
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+    )
+
+    creator: Mapped[User] = relationship()
+    members: Mapped[list["ConversationMember"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan",
+    )
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (Index("ix_conversations_created_by", "created_by"),)
+
+
+class ConversationMember(Base):
+    __tablename__ = "conversation_members"
+
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.id"), primary_key=True,
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(20), default="member")
+    last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    conversation: Mapped[Conversation] = relationship(back_populates="members")
+    user: Mapped[User] = relationship()
+
+    __table_args__ = (
+        Index("ix_conv_members_conv", "conversation_id"),
+        Index("ix_conv_members_user", "user_id"),
+    )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"))
+    sender_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    content_type: Mapped[str] = mapped_column(String(20), default="text")
+    content: Mapped[str] = mapped_column(Text)
+    reply_to_id: Mapped[str | None] = mapped_column(ForeignKey("messages.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+    )
+
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    sender: Mapped[User] = relationship()
+    reply_to: Mapped["Message | None"] = relationship(remote_side=[id])
+
+    __table_args__ = (
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+        Index("ix_messages_sender", "sender_id"),
+    )
+
+
+class MessageReadReceipt(Base):
+    __tablename__ = "message_read_receipts"
+
+    message_id: Mapped[str] = mapped_column(ForeignKey("messages.id"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    __table_args__ = (Index("ix_read_receipts_user", "user_id"),)
+
+
+class FileBlob(Base):
+    __tablename__ = "file_blobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    mime_type: Mapped[str] = mapped_column(String(127))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    storage_path: Mapped[str] = mapped_column(String(1024))
+    ref_count: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class File(Base):
+    __tablename__ = "files"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    blob_id: Mapped[str] = mapped_column(ForeignKey("file_blobs.id"))
+    filename: Mapped[str] = mapped_column(String(255))
+    uploaded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    blob: Mapped[FileBlob] = relationship()
+    uploader: Mapped[User] = relationship()
+
+    __table_args__ = (Index("ix_files_uploaded_by", "uploaded_by"),)

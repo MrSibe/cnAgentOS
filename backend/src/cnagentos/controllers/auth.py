@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from cnagentos.api import success_response
 from cnagentos.controllers.dependencies import AppSettings, CurrentContext, DbSession, require_csrf
-from cnagentos.schemas import LoginRequest
+from cnagentos.schemas import LoginRequest, RegisterRequest
 from cnagentos.services import auth as auth_service
 from cnagentos.services.platform import PlatformService
 
@@ -101,3 +101,19 @@ async def boot(request: Request, session: DbSession, context: CurrentContext):
 async def navigation(request: Request, session: DbSession, context: CurrentContext):
     service = PlatformService(session, context.user)
     return success_response(request, await service.navigation_for(context.permissions))
+
+
+@router.post("/register", status_code=201)
+async def register(
+    payload: RegisterRequest,
+    request: Request,
+    session: DbSession,
+    settings: AppSettings,
+):
+    """Self-register a new user (public endpoint, no CSRF)."""
+    ip_address = request.client.host if request.client else "unknown"
+    data = await auth_service.register_user(
+        session, settings, ip_address,
+        payload.username, payload.display_name, payload.password,
+    )
+    return success_response(request, data, status_code=201)

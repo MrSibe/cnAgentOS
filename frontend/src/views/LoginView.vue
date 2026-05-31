@@ -68,6 +68,9 @@ async function submit(): Promise<void> {
         <p class="security-note">凭据仅用于建立受保护会话，后台操作同时验证 CSRF 与实时权限。</p>
         <el-button class="login-submit" type="primary" size="large" :loading="loading" @click="submit">进入系统</el-button>
       </el-form>
+      <p class="register-link">
+        没有账号？<router-link to="/register">注册</router-link>
+      </p>
     </el-card>
   </main>
 </template>

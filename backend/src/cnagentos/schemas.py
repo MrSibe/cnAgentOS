@@ -261,3 +261,34 @@ class RegisterResponse(BaseModel):
     id: str
     username: str
     display_name: str
+
+
+# =============================================================================
+# 即时通信 (Chat, Phase 6)
+# =============================================================================
+
+
+class FriendRequestSend(BaseModel):
+    username: str = Field(min_length=1, max_length=80)
+    message: str | None = Field(default=None, max_length=500)
+
+
+class FriendRequestAction(BaseModel):
+    action: str = Field(pattern=r"^(accept|reject)$")
+
+
+class ConversationCreate(BaseModel):
+    member_usernames: list[str] = Field(min_length=1, max_length=200)
+    name: str | None = Field(default=None, max_length=255)
+
+
+class MessageSend(BaseModel):
+    conversation_id: str
+    content_type: str = Field(default="text", pattern=r"^(text|system)$")
+    content: str = Field(min_length=1, max_length=5000)
+    reply_to_id: str | None = None
+
+
+class MarkReadRequest(BaseModel):
+    conversation_id: str
+    last_read_message_id: str

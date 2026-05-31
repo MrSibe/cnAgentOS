@@ -158,6 +158,20 @@ async def initialize_reference_data(session: AsyncSession) -> Role:
         session.add(default_role)
         await session.flush()
 
+    # Grant Phase 6 chat permissions to default_user role (self-registered users)
+    default_chat_perms = [
+        "chat.contacts.view",
+        "chat.friends.request",
+        "chat.groups.create",
+        "chat.messages.send",
+    ]
+    for code in default_chat_perms:
+        perm = permissions.get(code)
+        if perm:
+            link = await session.get(RolePermission, (default_role.id, perm.id))
+            if link is None:
+                session.add(RolePermission(role_id=default_role.id, permission_id=perm.id))
+
     function_ids: dict[str, str] = {}
     for code, name, parent_code, route_path, icon, sort_order, required_code in SYSTEM_FUNCTIONS:
         function = await session.scalar(select(Function).where(Function.code == code))
