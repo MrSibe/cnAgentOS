@@ -140,6 +140,24 @@ async def update_source_status(
         raise
 
 
+@router.post("/watch-sources/{source_id}/enable-with-rules", dependencies=[Depends(require_csrf)])
+async def enable_source_with_rules(
+    source_id: str,
+    request: Request,
+    session: DbSession,
+    context: WatchSourceManager,
+):
+    """批量启用数据源及其所有采集规则，解决双向依赖死锁。"""
+    service = service_for(request, session, context)
+    try:
+        data = await service.enable_source_with_rules(source_id)
+        await session.commit()
+        return success_response(request, data)
+    except ApiError:
+        await session.rollback()
+        raise
+
+
 # --- Watch Rules ---
 @router.get("/watch-sources/{source_id}/rules")
 async def list_rules(

@@ -12,6 +12,7 @@ WATCH_AUDIT_ACTIONS = frozenset(
         "watch.source.created",
         "watch.source.updated",
         "watch.source.status_changed",
+        "watch.source.enabled_with_rules",
         "watch.rule.created",
         "watch.rule.updated",
         "watch.task.created",

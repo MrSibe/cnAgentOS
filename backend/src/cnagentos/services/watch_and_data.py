@@ -214,13 +214,19 @@ class WatchService:
             raise ApiError(404, "NOT_FOUND", "数据源不存在")
 
         if status == "active":
-            has_active_rule = await self.session.scalar(
-                select(func.count())
-                .select_from(WatchRule)
-                .where(WatchRule.source_id == source_id, WatchRule.status == "active")
-            )
-            if not has_active_rule:
-                raise ApiError(409, "INVALID_STATE", "启用数据源前至少需要一条启用状态的采集规则")
+            rules = (
+                await self.session.scalars(
+                    select(WatchRule).where(WatchRule.source_id == source_id)
+                )
+            ).all()
+            disabled_rules = [r for r in rules if r.status == "disabled"]
+            if disabled_rules and len(disabled_rules) == len(rules):
+                raise ApiError(
+                    409,
+                    "INVALID_STATE",
+                    "启用数据源前需要先启用绑定的采集规则。可使用批量启用接口同时激活数据源和规则。",
+                    {"hint": "POST /api/v1/admin/watch-sources/{source_id}/enable-with-rules"}
+                )
 
         source.status = status
         await write_watch_audit(
@@ -228,6 +234,42 @@ class WatchService:
             source.id, "succeeded", {"status": status}, self.ip_address
         )
         return self._serialize_source(source)
+
+    async def enable_source_with_rules(self, source_id: str) -> dict:
+        """批量启用数据源及其所有采集规则，打破双向依赖死锁。"""
+        source = await self.session.get(WatchSource, source_id)
+        if source is None:
+            raise ApiError(404, "NOT_FOUND", "数据源不存在")
+
+        try:
+            validate_source_policy(source.entry_url, source.allowed_hosts)
+        except ApiError as e:
+            raise ApiError(422, "SOURCE_UNSAFE", str(e), e.details)
+
+        source.status = "active"
+
+        rules = (
+            await self.session.scalars(
+                select(WatchRule).where(WatchRule.source_id == source_id)
+            )
+        ).all()
+
+        enabled_rules = []
+        for rule in rules:
+            if rule.status != "active":
+                rule.status = "active"
+                enabled_rules.append(rule)
+
+        await write_watch_audit(
+            self.session, self.actor, "watch.source.enabled_with_rules", "watch_source",
+            source.id, "succeeded",
+            {"rules_count": len(enabled_rules)}, self.ip_address
+        )
+
+        return {
+            "source": self._serialize_source(source),
+            "enabled_rules": [self._serialize_rule(r) for r in enabled_rules],
+        }
 
     # --- Watch Rules CRUD ---
     async def list_rules(self, source_id: str, page: int = 1, page_size: int = 20) -> tuple[list[dict], int]:
@@ -340,7 +382,11 @@ class WatchService:
             if source is None:
                 raise ApiError(404, "NOT_FOUND", f"数据源 {source_id} 不存在")
             if source.status != "active":
-                raise ApiError(409, "INVALID_STATE", f"数据源 {source.name} 未启用")
+                raise ApiError(
+                    409, "INVALID_STATE",
+                    f"数据源 {source.name} 未启用。请先使用「一键启用」功能激活数据源和规则。",
+                    {"hint": "POST /api/v1/admin/watch-sources/{source_id}/enable-with-rules"}
+                )
 
             try:
                 validate_source_policy(source.entry_url, source.allowed_hosts)
@@ -355,7 +401,11 @@ class WatchService:
                     if rule.source_id != source_id:
                         raise ApiError(400, "VALIDATION_ERROR", f"规则 {target.rule_id} 不属于数据源 {source_id}")
                     if rule.status != "active":
-                        raise ApiError(409, "INVALID_STATE", f"规则 {rule.name} 未启用")
+                        raise ApiError(
+                            409, "INVALID_STATE",
+                            f"规则 {rule.name} 未启用。请先使用「一键启用」功能激活数据源和规则。",
+                            {"hint": "POST /api/v1/admin/watch-sources/{source_id}/enable-with-rules"}
+                        )
 
         task = CollectionTask(
             id=str(uuid4()),

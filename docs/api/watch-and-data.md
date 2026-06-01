@@ -49,7 +49,25 @@
 
 权限：`watch.sources.manage`。请求：`{"status":"active"}` 或 `{"status":"disabled"}`。
 
-规则：启用前至少存在一条可用启用规则；禁用不影响历史内容。
+规则：启用前若存在绑定规则且均为 disabled，可通过 `POST /api/v1/admin/watch-sources/{source_id}/enable-with-rules` 批量启用；禁用不影响历史内容。
+
+### `POST /api/v1/admin/watch-sources/{source_id}/enable-with-rules`
+
+权限：`watch.sources.manage`。
+
+批量启用数据源及其所有采集规则。请求：`{}`（空对象）。
+
+响应 `200`：
+```json
+{
+  "data": {
+    "source": { /* 启用后的数据源对象 */ },
+    "enabled_rules": [ /* 启用后的规则列表 */ ]
+  }
+}
+```
+
+规则：同时将数据源和所有绑定规则设为 active；安全校验失败返回 `422 SOURCE_UNSAFE`；不存在数据源返回 `404`；已全部启用时返回成功。
 
 ## 采集规则
 

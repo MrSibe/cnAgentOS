@@ -255,6 +255,27 @@ async function toggleSource(source: WatchSourceItem): Promise<void> {
   }
 }
 
+async function enableSourceWithRules(source: WatchSourceItem): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `将同时启用数据源「${source.name}」及其所有采集规则。确认启用？`,
+      '一键启用',
+      { type: 'warning' }
+    )
+    const result = await post<{ source: WatchSourceItem; enabled_rules: WatchRuleItem[] }>(
+      `/api/v1/admin/watch-sources/${source.id}/enable-with-rules`,
+      {}
+    )
+    ElMessage.success(`已启用数据源和 ${result.enabled_rules.length} 条规则`)
+    await loadSources()
+    if (selectedSource.value?.id === source.id) {
+      await loadRules()
+    }
+  } catch (error) {
+    if (!isUserCancelled(error)) ElMessage.error(errorMessage(error))
+  }
+}
+
 async function createRule(): Promise<void> {
   if (!selectedSource.value) return
   submitting.value = true
@@ -345,7 +366,13 @@ onMounted(loadSources)
         <el-table-column label="认证" width="120"><template #default="{ row }">{{ row.auth_configured ? row.auth_mask || '已配置' : '未配置' }}</template></el-table-column>
         <el-table-column label="状态" width="105"><template #default="{ row }"><status-tag :value="row.status" /></template></el-table-column>
         <el-table-column label="更新时间" min-width="160"><template #default="{ row }">{{ shortTime(row.updated_at) }}</template></el-table-column>
-        <el-table-column label="操作" fixed="right" width="150"><template #default="{ row }"><el-button link type="primary" @click.stop="openSourceEdit(row)">编辑</el-button><el-button link @click.stop="toggleSource(row)">启停</el-button></template></el-table-column>
+        <el-table-column label="操作" fixed="right" width="230">
+          <template #default="{ row }">
+            <el-button link type="primary" @click.stop="openSourceEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === 'disabled'" link type="success" @click.stop="enableSourceWithRules(row)">一键启用</el-button>
+            <el-button v-else link @click.stop="toggleSource(row)">启停</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <el-pagination
         class="table-pagination"
@@ -376,6 +403,16 @@ onMounted(loadSources)
   <div class="resource-grid">
     <el-card class="resource-card" shadow="never">
       <template #header><strong>采集规则 {{ selectedSource ? `· ${selectedSource.name}` : '' }}</strong></template>
+      <el-alert
+        v-if="selectedSource && selectedSource.status === 'disabled'"
+        title="数据源未启用"
+        type="info"
+        :closable="false"
+        show-icon
+        class="mb-3"
+      >
+        当前数据源处于停用状态，无法发起采集任务。点击上方「一键启用」按钮可同时激活数据源和所有关联规则。
+      </el-alert>
       <el-empty v-if="!selectedSource" description="选择一个数据源后查看规则" />
       <el-table v-else v-loading="ruleLoading" :data="rules">
         <el-table-column prop="name" label="名称" min-width="150" />
@@ -383,7 +420,12 @@ onMounted(loadSources)
         <el-table-column prop="extractor_type" label="解析" width="90" />
         <el-table-column label="状态" width="105"><template #default="{ row }"><status-tag :value="row.status" /></template></el-table-column>
         <el-table-column label="更新时间" min-width="160"><template #default="{ row }">{{ shortTime(row.updated_at) }}</template></el-table-column>
-        <el-table-column label="操作" fixed="right" width="170"><template #default="{ row }"><el-button link type="primary" @click="openRuleEdit(row)">编辑</el-button><el-button link type="success" :disabled="!canRunTask" @click="openTask(row)">运行</el-button></template></el-table-column>
+        <el-table-column label="操作" fixed="right" width="200">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openRuleEdit(row)">编辑</el-button>
+            <el-button link type="success" :disabled="!canRunTask || selectedSource?.status !== 'active'" @click="openTask(row)">运行</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <el-pagination
         v-if="selectedSource"
