@@ -412,7 +412,7 @@ export interface KeywordItem {
 export interface SentimentTaskItem {
   id: string
   name: string
-  task_type: string
+  scope: string
   status: string
   progress: number
   source_item_count?: number

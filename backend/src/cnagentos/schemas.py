@@ -379,9 +379,8 @@ class BanMemberRequest(BaseModel):
 
 class SentimentTaskCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    task_type: str = Field(default="full", pattern=r"^(full|sentiment|keyword|hotspot)$")
+    scope: str = Field(pattern=r"^(chat|data_warehouse)$")
     data_scope: dict | None = None
-    include_chat_data: bool = False
 
 
 class TrendItem(BaseModel):

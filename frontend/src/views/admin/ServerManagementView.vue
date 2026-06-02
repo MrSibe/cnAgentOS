@@ -99,7 +99,7 @@ onMounted(load)
     <div style="margin-bottom: 16px">
       <el-button type="primary" @click="createVisible = true; resetCreate()">新增服务器</el-button>
     </div>
-    <el-table v-loading="loading" :data="servers" stripe>
+    <el-table v-loading="loading" :data="servers">
       <el-table-column prop="name" label="名称" width="150" />
       <el-table-column prop="base_url" label="URL" min-width="250" />
       <el-table-column prop="priority" label="优先级" width="80" />

@@ -1,6 +1,5 @@
 """Sentiment analysis service — task management and AI-powered analysis (Phase 8)."""
 
-import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -28,58 +27,16 @@ def _now() -> datetime:
     return utc_now()
 
 
-SENTIMENT_SYSTEM_PROMPT = """你是一个智能舆情分析助手。你的任务是分析提供的新闻/文章内容，并输出结构化的分析报告。
+SENTIMENT_SYSTEM_PROMPT = """你是一个智能舆情分析助手。你的任务是基于提供的聊天记录或采集内容进行风险评估和分析，输出一份综合的分析报告。
 
-请按以下 JSON 格式输出（不要有任何其他文字）：
+请用中文输出一篇完整的分析报告，包含以下内容（不要输出 JSON，直接写文章）：
 
-对于情感分析 (sentiment):
-{
-  "report_type": "sentiment",
-  "report_data": {
-    "positive_count": 数量,
-    "neutral_count": 数量,
-    "negative_count": 数量,
-    "details": [
-      {"content_title": "标题", "sentiment": "positive/neutral/negative", "confidence": 0.0-1.0}
-    ]
-  },
-  "summary_text": "情感分析总体摘要"
-}
+1. **总体评估**：整体风险等级（低/中/高）和核心结论
+2. **关键发现**：列出最重要的风险信号或趋势（至少 2-5 条）
+3. **详细分析**：对数据的深入分析
+4. **建议**：可操作的改进建议（至少 2-3 条）
 
-对于关键词提取 (keyword):
-{
-  "report_type": "keyword",
-  "report_data": {
-    "keywords": [
-      {"word": "关键词", "count": 出现次数, "weight": 0.0-1.0}
-    ]
-  },
-  "summary_text": "关键词分析摘要"
-}
-
-对于热点挖掘 (hotspot):
-{
-  "report_type": "hotspot",
-  "report_data": {
-    "hotspots": [
-      {"title": "热点主题", "related_count": 相关文章数, "description": "描述"}
-    ]
-  },
-  "summary_text": "热点分析摘要"
-}
-
-对于综合分析 (full):
-需要输出所有上述三种报告，外加总体摘要。格式为 JSON 数组：
-[
-  {sentiment报告},
-  {keyword报告},
-  {hotspot报告},
-  {
-    "report_type": "summary",
-    "report_data": {},
-    "summary_text": "总体舆情分析摘要，包含风险提示"
-  }
-]"""
+请确保报告结构清晰、内容充实，使用 markdown 格式排版。"""
 
 
 class SentimentAnalysisService:
@@ -101,14 +58,36 @@ class SentimentAnalysisService:
         task = SentimentTask(
             id=str(uuid4()),
             name=data.name,
-            task_type=data.task_type,
+            task_type=data.scope,
             data_scope=data.data_scope,
-            include_chat_data=data.include_chat_data,
-            status="pending",
+            include_chat_data=(data.scope == "chat"),
+            status="running",
+            started_at=utc_now(),
             created_by=self.actor_id,
         )
         self.session.add(task)
         await self.session.flush()
+
+        # Execute analysis immediately (synchronous)
+        try:
+            await self._execute_analysis(task)
+            task.status = "completed"
+            task.progress = 100
+            task.completed_at = utc_now()
+        except ApiError as exc:
+            task.status = "failed"
+            task.error_message = exc.message[:500]
+        except Exception as exc:
+            task.status = "failed"
+            task.error_message = str(exc)[:500]
+
+        # Pre-load reports before commit (avoid lazy-load after session close)
+        report_rows = (
+            (await self.session.scalars(
+                select(SentimentReport).where(SentimentReport.task_id == task.id)
+            )).all()
+        )
+        report_dicts = [self._report_to_dict(r) for r in report_rows]
 
         # Audit
         self.session.add(AuditLog(
@@ -117,13 +96,16 @@ class SentimentAnalysisService:
             action="sentiment.task.create",
             target_type="sentiment_task",
             target_id=task.id,
-            result="succeeded",
-            detail={"name": data.name, "task_type": data.task_type},
+            result="succeeded" if task.status == "completed" else "failed",
+            detail={"name": data.name, "scope": data.scope, "status": task.status},
             ip_address=self.ip_address,
             created_at=utc_now(),
         ))
         await self.session.commit()
-        return self._task_to_dict(task)
+
+        result = self._task_to_dict(task, include_reports=False)
+        result["reports"] = report_dicts
+        return result
 
     async def run_task(self, task_id: str) -> dict:
         task = await self.session.get(SentimentTask, task_id)
@@ -145,9 +127,9 @@ class SentimentAnalysisService:
             task.status = "completed"
             task.progress = 100
             task.completed_at = utc_now()
-        except ApiError:
+        except ApiError as exc:
             task.status = "failed"
-            task.error_message = "分析任务执行失败"
+            task.error_message = exc.message[:500]
             raise
         except Exception as exc:
             task.status = "failed"
@@ -181,66 +163,39 @@ class SentimentAnalysisService:
         if model is None:
             raise ApiError(422, "MODEL_UNAVAILABLE", "系统未配置默认模型或默认模型未启用")
 
-        # 2. Build data scope filter
-        scope = task.data_scope or {}
-        start_date_str = scope.get("start_date")
-        end_date_str = scope.get("end_date")
-        source_ids = scope.get("source_ids")
+        # 2. Gather content based on scope
+        scope_val = task.task_type  # stores "chat" or "data_warehouse"
+        scope_data = task.data_scope or {}
+        start_date_str = scope_data.get("start_date")
+        end_date_str = scope_data.get("end_date")
 
-        query = select(KnowledgeItem).where(KnowledgeItem.status == "available")
-        if start_date_str:
-            query = query.where(KnowledgeItem.collected_at >= start_date_str)
-        if end_date_str:
-            query = query.where(KnowledgeItem.collected_at <= end_date_str + "T23:59:59")
-        if source_ids:
-            query = query.where(KnowledgeItem.source_id.in_(source_ids))
-
-        rows = (await self.session.scalars(query.limit(200))).all()
-        if not rows:
-            raise ApiError(400, "VALIDATION_ERROR", "没有符合条件的知识内容可供分析")
-
-        # 3. Build analysis content
-        content_parts = []
-        for item in rows:
-            content_parts.append(
-                f"标题: {item.title}\n摘要: {item.summary or item.content[:200]}\n---"
+        if scope_val == "chat":
+            analysis_content, source_count = await self._build_chat_content(
+                start_date_str, end_date_str,
             )
-        analysis_content = "\n".join(content_parts[:100])
-
-        # 4. Get chat messages if requested
-        chat_content = ""
-        if task.include_chat_data:
-            chat_messages = (
-                (
-                    await self.session.execute(
-                        select(Message.content)
-                        .order_by(Message.created_at.desc())
-                        .limit(200)
-                    )
-                )
-                .scalars()
-                .all()
+            scope_label = "聊天记录"
+        else:
+            source_ids = scope_data.get("source_ids")
+            analysis_content, source_count = await self._build_warehouse_content(
+                start_date_str, end_date_str, source_ids,
             )
-            if chat_messages:
-                chat_content = "聊天消息:\n" + "\n".join(
-                    f"- {msg[:200]}" for msg in reversed(chat_messages)
-                )
+            scope_label = "数据仓库内容"
 
-        # 5. Decrypt API key
+        if not analysis_content:
+            raise ApiError(400, "VALIDATION_ERROR", f"没有符合条件的{scope_label}可供分析")
+
+        # 3. Decrypt API key
         api_key = None
         try:
             api_key = decrypt(model.credential_ciphertext)
         except InvalidToken:
             raise ApiError(422, "MODEL_UNAVAILABLE", "模型凭据无效")
 
-        # 6. Call model
+        # 4. Call model
         from cnagentos.services.model_provider import ModelProviderClient
 
-        task_type = task.task_type
         prompt = SENTIMENT_SYSTEM_PROMPT
-        user_msg = f"请对以下{len(rows)}条内容进行{'综合分析' if task_type=='full' else task_type}：\n\n{analysis_content}"
-        if chat_content:
-            user_msg += f"\n\n{chat_content}"
+        user_msg = f"请对以下{source_count}条{scope_label}进行舆情分析：\n\n{analysis_content}"
 
         client = ModelProviderClient(
             api_key=api_key,
@@ -254,10 +209,10 @@ class SentimentAnalysisService:
             caller_user_id=self.actor_id,
             purpose="sentiment_analysis",
             related_id=task.id,
-            input_tokens=0,
-            output_tokens=0,
+            prompt_tokens=0,
+            completion_tokens=0,
             status="running",
-            created_at=utc_now(),
+            started_at=utc_now(),
         )
         self.session.add(call_log)
         await self.session.flush()
@@ -265,7 +220,7 @@ class SentimentAnalysisService:
         start_time = utc_now()
         try:
             response = await client.complete_chat_with_messages(
-                model.name,
+                model.model_name,
                 [
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": user_msg},
@@ -275,74 +230,92 @@ class SentimentAnalysisService:
 
             call_log.status = "succeeded"
             call_log.latency_ms = latency
-            call_log.input_tokens = response.usage.prompt_tokens
-            call_log.output_tokens = response.usage.completion_tokens
+            call_log.prompt_tokens = response.usage.prompt_tokens
+            call_log.completion_tokens = response.usage.completion_tokens
+            call_log.finished_at = utc_now()
         except Exception as exc:
             latency = int((utc_now() - start_time).total_seconds() * 1000)
             call_log.status = "failed"
             call_log.error_code = "UPSTREAM_ERROR"
             call_log.latency_ms = latency
+            call_log.finished_at = utc_now()
             await self.session.flush()
             raise ApiError(502, "UPSTREAM_ERROR", f"模型调用失败: {str(exc)[:200]}")
 
         await self.session.flush()
 
-        # 7. Parse and save reports
+        # 5. Parse and save report
         reply_text = response.reply.strip()
-        await self._save_reports(task, reply_text, len(rows))
+        await self._save_report(task, reply_text, source_count)
 
-    async def _save_reports(
+    async def _build_chat_content(
+        self, start_date_str: str | None, end_date_str: str | None,
+    ) -> tuple[str, int]:
+        """Fetch chat messages within date range and format for analysis."""
+        from cnagentos.models.entities import Message
+
+        query = select(Message.content, Message.created_at).order_by(Message.created_at.desc())
+        if start_date_str:
+            start_dt = datetime.fromisoformat(start_date_str)
+            query = query.where(Message.created_at >= start_dt)
+        if end_date_str:
+            end_dt = datetime.fromisoformat(end_date_str).replace(
+                hour=23, minute=59, second=59, microsecond=999999,
+            )
+            query = query.where(Message.created_at <= end_dt)
+
+        rows = (await self.session.execute(query.limit(200))).all()
+        if not rows:
+            return "", 0
+
+        parts = []
+        for msg_content, msg_time in rows:
+            ts = msg_time.isoformat() if msg_time else ""
+            text = (msg_content or "")[:200]
+            parts.append(f"[{ts}] {text}")
+        return "\n".join(parts), len(rows)
+
+    async def _build_warehouse_content(
+        self, start_date_str: str | None, end_date_str: str | None,
+        source_ids: list[str] | None,
+    ) -> tuple[str, int]:
+        """Fetch knowledge items within filters and format for analysis."""
+        query = select(KnowledgeItem).where(KnowledgeItem.status == "available")
+        if start_date_str:
+            start_dt = datetime.fromisoformat(start_date_str)
+            query = query.where(KnowledgeItem.collected_at >= start_dt)
+        if end_date_str:
+            end_dt = datetime.fromisoformat(end_date_str).replace(
+                hour=23, minute=59, second=59, microsecond=999999,
+            )
+            query = query.where(KnowledgeItem.collected_at <= end_dt)
+        if source_ids:
+            query = query.where(KnowledgeItem.source_id.in_(source_ids))
+
+        rows = (await self.session.scalars(query.limit(200))).all()
+        if not rows:
+            return "", 0
+
+        parts = []
+        for item in rows:
+            parts.append(
+                f"标题: {item.title}\n摘要: {item.summary or (item.content or '')[:200]}\n---"
+            )
+        return "\n".join(parts[:100]), len(rows)
+
+    async def _save_report(
         self, task: SentimentTask, reply_text: str, item_count: int,
     ) -> None:
-        """Parse model response and save report records."""
-        # Try to parse as JSON
-        try:
-            # Remove markdown code block markers if present
-            cleaned = reply_text.strip()
-            if cleaned.startswith("```"):
-                # Find the JSON content
-                start = cleaned.find("{")
-                if start == -1:
-                    start = cleaned.find("[")
-                if start >= 0:
-                    cleaned = cleaned[start:]
-                end = cleaned.rfind("}")
-                if end >= 0:
-                    cleaned = cleaned[:end + 1]
-                elif cleaned.rfind("]") >= 0:
-                    end = cleaned.rfind("]")
-                    cleaned = cleaned[:end + 1]
-
-            reports_data = json.loads(cleaned)
-
-            # Normalize to list
-            if isinstance(reports_data, dict):
-                reports_data = [reports_data]
-
-            for report_datum in reports_data:
-                if not isinstance(report_datum, dict):
-                    continue
-                report_type = report_datum.get("report_type", task.task_type)
-                self.session.add(SentimentReport(
-                    id=str(uuid4()),
-                    task_id=task.id,
-                    report_type=report_type,
-                    report_data=report_datum.get("report_data", {}),
-                    summary_text=report_datum.get("summary_text") or "",
-                    source_item_count=item_count,
-                    created_at=utc_now(),
-                ))
-        except (json.JSONDecodeError, ValueError):
-            # Fallback: save raw text as summary report
-            self.session.add(SentimentReport(
-                id=str(uuid4()),
-                task_id=task.id,
-                report_type="summary",
-                report_data={"raw": reply_text[:5000]},
-                summary_text=reply_text[:500],
-                source_item_count=item_count,
-                created_at=utc_now(),
-            ))
+        """Save the AI-generated report as plain text."""
+        self.session.add(SentimentReport(
+            id=str(uuid4()),
+            task_id=task.id,
+            report_type="summary",
+            report_data={"raw": reply_text[:5000]},
+            summary_text=reply_text[:5000],
+            source_item_count=item_count,
+            created_at=utc_now(),
+        ))
 
     async def list_tasks(
         self, page: int = 1, page_size: int = 20, status: str | None = None,
@@ -409,9 +382,8 @@ class SentimentAnalysisService:
         d = {
             "id": task.id,
             "name": task.name,
-            "task_type": task.task_type,
+            "scope": task.task_type,
             "data_scope": task.data_scope,
-            "include_chat_data": task.include_chat_data,
             "status": task.status,
             "progress": task.progress,
             "error_message": task.error_message,

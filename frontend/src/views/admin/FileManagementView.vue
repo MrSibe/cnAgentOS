@@ -79,7 +79,7 @@ onMounted(load)
     </el-col>
   </el-row>
   <el-card>
-    <el-table v-loading="loading" :data="files" stripe>
+    <el-table v-loading="loading" :data="files">
       <el-table-column prop="filename" label="文件名" min-width="200" />
       <el-table-column prop="mime_type" label="类型" width="120" />
       <el-table-column label="大小" width="100">

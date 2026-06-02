@@ -143,7 +143,7 @@ onMounted(load)
     <div style="margin-bottom: 16px">
       <el-button type="primary" @click="createVisible = true; resetCreate()">新增员工</el-button>
     </div>
-    <el-table v-loading="loading" :data="employees" stripe>
+    <el-table v-loading="loading" :data="employees">
       <el-table-column prop="name" label="名称" width="150" />
       <el-table-column prop="code" label="代码" width="120" />
       <el-table-column label="状态" width="80">
@@ -221,7 +221,7 @@ onMounted(load)
   </el-dialog>
 
   <el-dialog v-model="callLogVisible" title="调用日志" width="600px">
-    <el-table :data="callLogs" stripe>
+    <el-table :data="callLogs">
       <el-table-column prop="tool_name" label="工具" />
       <el-table-column prop="caller_name" label="调用者" />
       <el-table-column label="状态" width="100">

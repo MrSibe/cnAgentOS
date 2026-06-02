@@ -100,7 +100,7 @@ onMounted(load)
     <div style="margin-bottom: 16px">
       <el-button type="primary" @click="createVisible = true; resetCreate()">注册工具</el-button>
     </div>
-    <el-table v-loading="loading" :data="tools" stripe>
+    <el-table v-loading="loading" :data="tools">
       <el-table-column prop="name" label="名称" width="150" />
       <el-table-column prop="code" label="代码" width="120" />
       <el-table-column prop="tool_type" label="类型" width="120" />

@@ -94,52 +94,126 @@
 
 | 方法 | 路径 | 权限 | CSRF | 说明 |
 | --- | --- | --- | --- | --- |
-| `POST` | `/sentiment/tasks` | `sentiment.manage` | ✓ | 创建分析任务 |
+| `POST` | `/sentiment/tasks` | `sentiment.manage` | ✓ | 创建并自动执行分析任务 |
 | `GET` | `/sentiment/tasks` | `sentiment.view` | - | 任务列表 |
-| `GET` | `/sentiment/tasks/{id}` | `sentiment.view` | - | 任务详情 |
-| `POST` | `/sentiment/tasks/{id}/run` | `sentiment.manage` | ✓ | 运行/重跑任务 |
-| `GET` | `/sentiment/tasks/{id}/reports` | `sentiment.view` | - | 任务下的报告列表 |
+| `GET` | `/sentiment/tasks/{id}` | `sentiment.view` | - | 任务详情（含报告） |
 | `GET` | `/sentiment/reports/{id}` | `sentiment.view` | - | 报告详情 |
 
 ### `POST /sentiment/tasks`
 
-创建并启动舆情分析任务。
+创建并自动执行舆情分析任务。创建即同步执行，响应返回任务结果和报告。
 
 **请求体**：
 
 ```json
 {
   "name": "五月舆情分析",
-  "task_type": "full",
+  "scope": "data_warehouse",
   "data_scope": {
     "start_date": "2026-05-01",
     "end_date": "2026-05-31",
     "source_ids": ["src1", "src2"]
-  },
-  "include_chat_data": false
+  }
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `name` | string | 是 | 任务名称，1-120 字符 |
-| `task_type` | string | 否 | 分析类型：`full`(全部)、`sentiment`(情感)、`keyword`(关键词)、`hotspot`(热点)；默认 `full` |
+| `scope` | string | 是 | 分析范围：`chat`(聊天分析)、`data_warehouse`(数据仓库分析) |
 | `data_scope` | object | 否 | 数据范围：`start_date`/`end_date`/`source_ids` |
-| `include_chat_data` | boolean | 否 | 是否纳入聊天数据，默认 `false` |
 
-**响应** `201`：
+**响应** `200`：
 
 ```json
 {
   "data": {
     "id": "task-uuid",
     "name": "五月舆情分析",
-    "task_type": "full",
-    "status": "pending",
-    "created_at": "2026-05-31T12:00:00Z"
+    "scope": "data_warehouse",
+    "status": "completed",
+    "progress": 100,
+    "source_item_count": 80,
+    "created_at": "2026-05-31T12:00:00Z",
+    "completed_at": "2026-05-31T12:05:00Z",
+    "reports": [
+      {
+        "id": "report-uuid",
+        "report_type": "summary",
+        "summary_text": "完整的分析报告文本（markdown 格式）",
+        "report_data": {
+          "raw": "完整的分析报告文本（与 summary_text 相同）"
+        }
+      }
+    ]
   },
   "meta": { "request_id": "uuid" }
 }
+```
+
+### `GET /sentiment/tasks`
+
+分页列表。
+
+**查询参数**：`page`、`page_size`、`status`（可选过滤）
+
+**响应**：
+
+```json
+{
+  "data": [
+    {
+      "id": "task-uuid",
+      "name": "五月舆情分析",
+      "scope": "data_warehouse",
+      "status": "completed",
+      "progress": 100,
+      "source_item_count": 80,
+      "created_at": "2026-05-31T12:00:00Z",
+      "completed_at": "2026-05-31T12:05:00Z"
+    }
+  ],
+  "meta": { "page": 1, "page_size": 20, "total": 1, "request_id": "uuid" }
+}
+```
+
+### `GET /sentiment/tasks/{id}`
+
+任务详情，含关联的报告列表。
+
+**响应**：
+
+```json
+{
+  "data": {
+    "id": "task-uuid",
+    "name": "五月舆情分析",
+    "scope": "data_warehouse",
+    "status": "completed",
+    "progress": 100,
+    "source_item_count": 80,
+    "created_by": { "id": "user-uuid", "display_name": "管理员" },
+    "created_at": "2026-05-31T12:00:00Z",
+    "started_at": "2026-05-31T12:00:01Z",
+    "completed_at": "2026-05-31T12:05:00Z",
+    "reports": [
+      {
+        "id": "report-uuid",
+        "report_type": "summary",
+        "summary_text": "完整的分析报告文本...",
+        "report_data": {"raw": "完整的分析报告文本..."},
+        "source_item_count": 80,
+        "created_at": "2026-05-31T12:05:00Z"
+      }
+    ]
+  },
+  "meta": { "request_id": "uuid" }
+}
+```
+
+### `GET /sentiment/reports/{id}`
+
+获取单份报告详情。结构与上方 `report_data` 一致。
 ```
 
 ### `GET /sentiment/tasks`

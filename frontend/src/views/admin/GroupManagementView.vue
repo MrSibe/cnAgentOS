@@ -123,7 +123,7 @@ onMounted(load)
       <el-input v-model="searchQuery" placeholder="搜索群名称" clearable style="width: 300px" @keyup.enter="onSearch" />
       <el-button type="primary" @click="onSearch">搜索</el-button>
     </div>
-    <el-table v-loading="loading" :data="groups" stripe>
+    <el-table v-loading="loading" :data="groups">
       <el-table-column prop="name" label="群名称" />
       <el-table-column prop="member_count" label="成员数" width="100" />
       <el-table-column label="状态" width="100">
@@ -158,7 +158,7 @@ onMounted(load)
         <el-descriptions-item label="创建者">{{ selectedGroup.created_by }}</el-descriptions-item>
       </el-descriptions>
       <el-divider>成员列表</el-divider>
-      <el-table :data="selectedGroup.members" stripe>
+      <el-table :data="selectedGroup.members">
         <el-table-column prop="username" label="用户名" />
         <el-table-column prop="display_name" label="显示名称" />
         <el-table-column prop="role" label="角色" width="100" />

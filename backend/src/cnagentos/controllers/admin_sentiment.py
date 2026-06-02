@@ -90,7 +90,7 @@ async def list_sentiment_tasks(
     return success_response(request, data, page=page, page_size=page_size, total=total)
 
 
-@router.post("/sentiment/tasks", status_code=201)
+@router.post("/sentiment/tasks")
 async def create_sentiment_task(
     request: Request,
     session: DbSession,
@@ -99,7 +99,7 @@ async def create_sentiment_task(
     _=Depends(require_csrf),
 ):
     svc = sentiment_service(request, session, context)
-    return success_response(request, await svc.create_task(payload), status_code=201)
+    return success_response(request, await svc.create_task(payload))
 
 
 @router.get("/sentiment/tasks/{task_id}")
@@ -111,18 +111,6 @@ async def get_sentiment_task(
 ):
     svc = sentiment_service(request, session, context)
     return success_response(request, await svc.get_task(task_id))
-
-
-@router.post("/sentiment/tasks/{task_id}/run")
-async def run_sentiment_task(
-    request: Request,
-    session: DbSession,
-    context: SentimentAdmin,
-    task_id: str,
-    _=Depends(require_csrf),
-):
-    svc = sentiment_service(request, session, context)
-    return success_response(request, await svc.run_task(task_id))
 
 
 @router.get("/sentiment/tasks/{task_id}/reports")

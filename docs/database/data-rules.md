@@ -120,9 +120,9 @@ stateDiagram-v2
 
 ## 9. 舆情分析
 
-- 分析任务的数据源限定为 `knowledge_items.status=available` 的内容。
-- 聊天数据只有在 `include_chat_data=true` 且来源消息所属会话的成员仍为当前群成员、会话未归档时才纳入分析。
-- 分析报告必须可追溯到其分析任务批次。
+- 分析任务分为两种分析范围：`chat`（聊天分析）和 `data_warehouse`（数据仓库分析），通过 `scope` 字段指定。
+- 聊天分析查询 `Message` 表，按 `data_scope` 中的 `start_date`/`end_date` 过滤时间范围。
+- 数据仓库分析查询 `knowledge_items` 表中 `status=available` 的内容，按 `data_scope` 中的 `start_date`/`end_date`/`source_ids` 过滤。
+- 每次分析生成一份纯文本报告（`report_type=summary`），AI 直接输出 markdown 格式的分析文章。
 - 模型分析失败时标记任务为 `failed`，保留 `error_message`，不修改已有报告。
-- 分析任务创建和执行必须写入审计日志（动作代码 `sentiment.task.create`、`sentiment.task.run`）。
-- Dashboard 统计仅返回聚合数值，不暴露单个用户或会话内容。
+- 分析任务创建和执行必须写入审计日志（动作代码 `sentiment.task.create`）。
